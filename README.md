@@ -51,10 +51,10 @@ daily-report-tracker/
 ### Installation
 
 ```bash
-git clone https://github.com/<Kiki-K82>/daily-report-tracker.git
-cd daily-report-tracker
-npm install
-npm run dev
+   git clone https://github.com/Kiki-K82/daily-report-tracker.git
+   cd daily-report-tracker
+   npm install
+   npm run dev
 ```
 
 Then open http://localhost:5173/ in your browser.
