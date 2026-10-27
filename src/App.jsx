@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { db } from "./db";
 import { 
   FileText, 
   Mic, 
@@ -20,52 +21,14 @@ import {
   Search
 } from "lucide-react";
 
-export default function App() {
-  const todayFormatted = "Oct 26, 2026";
+const DEFAULT_PROFILE = {
+  name: "Alex Johnson",
+  company: "Apex Construction Inc.",
+  role: "Senior Superintendent",
+};
 
-const reportRef = React.useRef(null);
-
-const handleExportPDF = () => {
-    showToast("Opening print dialog... Select 'Save as PDF'");
-    window.print();
-  };
-
-  // --- State with LocalStorage Persistence ---
-  const [activeTab, setActiveTab] = useState("proj-1");
-  const [activeView, setActiveView] = useState("dashboard");
-  const [selectedReport, setSelectedReport] = useState(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [toastMessage, setToastMessage] = useState("");
-
-  // Profile State (Persisted)
-  const [profile, setProfile] = useState(() => {
-    const savedProfile = localStorage.getItem("apex_user_profile");
-    return savedProfile ? JSON.parse(savedProfile) : {
-      name: "Alex Johnson",
-      company: "Apex Construction Inc.",
-      role: "Senior Superintendent"
-    };
-  });
-
-  React.useEffect(() => {
-    localStorage.setItem("apex_user_profile", JSON.stringify(profile));
-  }, [profile]);
-
-  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
-  const [tempProfile, setTempProfile] = useState({ ...profile });
-
-  // Projects State (Static)
-  const [projects] = useState([
-    { id: "proj-1", name: "Project Alpha", code: "PA-2026", location: "Downtown Plaza" },
-    { id: "proj-2", name: "Project Beta", code: "PB-2026", location: "Industrial Park" },
-    { id: "proj-3", name: "Project Gamma", code: "PG-2026", location: "Westside District" }
-  ]);
-
-  // Reports State (Persisted)
-  const [reports, setReports] = useState(() => {
-    const savedReports = localStorage.getItem("apex_daily_reports");
-    return savedReports ? JSON.parse(savedReports) : [
-      {
+const SAMPLE_REPORTS = [
+  {
         id: "rep-101",
         projectId: "proj-1",
         date: "Oct 20, 2026",
@@ -92,12 +55,73 @@ const handleExportPDF = () => {
         weather: "70°F, Sunny",
         prepBy: "Alex Johnson"
       }
-    ];
-  });
+];
 
-  React.useEffect(() => {
-    localStorage.setItem("apex_daily_reports", JSON.stringify(reports));
-  }, [reports]);
+export default function App() {
+  const todayFormatted = toDisplay(todayISO());
+
+const reportRef = React.useRef(null);
+
+const handleExportPDF = () => {
+    showToast("Opening print dialog... Select 'Save as PDF'");
+    window.print();
+  };
+
+  // --- State with LocalStorage Persistence ---
+  const [activeTab, setActiveTab] = useState("proj-1");
+  const [activeView, setActiveView] = useState("dashboard");
+  const [selectedReport, setSelectedReport] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [toastMessage, setToastMessage] = useState("");
+
+const [profile, setProfile] = useState(DEFAULT_PROFILE);
+const [reports, setReports] = useState([]);
+const [isLoaded, setIsLoaded] = useState(false);
+const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+const [tempProfile, setTempProfile] = useState({ ...profile });
+
+// Load data from IndexedDB once when the app opens
+useEffect(() => {
+  async function loadData() {
+    try {
+      // Ask the browser not to auto-delete our data when space runs low
+      if (navigator.storage?.persist) await navigator.storage.persist();
+
+      // One-time move of old localStorage data into IndexedDB
+      const oldReports = localStorage.getItem("apex_daily_reports");
+      const oldProfile = localStorage.getItem("apex_user_profile");
+      if (oldReports) await db.reports.bulkPut(JSON.parse(oldReports));
+      if (oldProfile) await db.profile.put({ id: "me", ...JSON.parse(oldProfile) });
+      localStorage.removeItem("apex_daily_reports");
+      localStorage.removeItem("apex_user_profile");
+
+      const savedProfile = await db.profile.get("me");
+      if (savedProfile) {
+        const { id, ...rest } = savedProfile;
+        setProfile(rest);
+        setReports(await db.reports.reverse().toArray());
+      } else {
+        // Very first run: save the defaults and sample reports
+        await db.profile.put({ id: "me", ...DEFAULT_PROFILE });
+        await db.reports.bulkPut(SAMPLE_REPORTS);
+        setReports(SAMPLE_REPORTS);
+      }
+    } catch (err) {
+      console.error("Failed to load data:", err);
+    } finally {
+      setIsLoaded(true);
+    }
+  }
+  loadData();
+}, []);
+
+  // Projects State (Static)
+  const [projects] = useState([
+    { id: "proj-1", name: "Project Alpha", code: "PA-2026", location: "Downtown Plaza" },
+    { id: "proj-2", name: "Project Beta", code: "PB-2026", location: "Industrial Park" },
+    { id: "proj-3", name: "Project Gamma", code: "PG-2026", location: "Westside District" }
+  ]);
+
 
   // Toast Helper
   const showToast = (msg) => {
@@ -116,42 +140,56 @@ const handleExportPDF = () => {
     setActiveView("view_report");
   };
 
-  const handleDeleteReport = (id, title) => {
-    if (window.confirm(`Are you sure you want to delete "${title}"?`)) {
-      setReports((prev) => prev.filter((r) => r.id !== id));
-      showToast("Report deleted successfully.");
-      if (selectedReport?.id === id) {
-        setSelectedReport(null);
-        setActiveView("dashboard");
-      }
+const handleDeleteReport = async (id, title) => {
+  if (!window.confirm(`Are you sure you want to delete "${title}"?`)) return;
+  try {
+    await db.reports.delete(id);
+    setReports((prev) => prev.filter((r) => r.id !== id));
+    showToast("Report deleted successfully.");
+    if (selectedReport?.id === id) {
+      setSelectedReport(null);
+      setActiveView("dashboard");
     }
-  };
+  } catch (err) {
+    console.error(err);
+    showToast("Could not delete report. Please try again.");
+  }
+};
 
-  const handleSaveReport = (reportData) => {
+const handleSaveReport = async (reportData) => {
+  try {
+    await db.reports.put(reportData);
     setReports((prevReports) => {
       const exists = prevReports.some((r) => r.id === reportData.id);
-      if (exists) {
-        return prevReports.map((r) => (r.id === reportData.id ? reportData : r));
-      } else {
-        return [reportData, ...prevReports];
-      }
+      return exists
+        ? prevReports.map((r) => (r.id === reportData.id ? reportData : r))
+        : [reportData, ...prevReports];
     });
-
     showToast(selectedReport ? "Report updated successfully!" : "New report created successfully!");
-    setActiveView("dashboard");
-    setSelectedReport(null);
-  };
+    setSelectedReport(reportData);
+    setActiveView("view_report");
+  } catch (err) {
+    console.error(err);
+    showToast("Save failed: storage may be full. Report not saved.");
+  }
+};
+
+const handleSaveProfile = async (e) => {
+  e.preventDefault();
+  try {
+    await db.profile.put({ id: "me", ...tempProfile });
+    setProfile({ ...tempProfile });
+    setIsEditProfileOpen(false);
+    showToast("Profile updated successfully!");
+  } catch (err) {
+    console.error(err);
+    showToast("Could not save profile.");
+  }
+};
 
   const handleOpenEditProfile = () => {
     setTempProfile({ ...profile });
     setIsEditProfileOpen(true);
-  };
-
-  const handleSaveProfile = (e) => {
-    e.preventDefault();
-    setProfile({ ...tempProfile });
-    setIsEditProfileOpen(false);
-    showToast("Profile updated successfully!");
   };
 
   const activeProject = projects.find((p) => p.id === activeTab) || projects[0];
@@ -162,6 +200,14 @@ const handleExportPDF = () => {
       r.date.toLowerCase().includes(searchQuery.toLowerCase()) ||
       r.bullets.toLowerCase().includes(searchQuery.toLowerCase())
     );
+
+if (!isLoaded) {
+  return (
+    <div className="min-h-screen flex items-center justify-center text-slate-500">
+      Loading reports...
+    </div>
+  );
+}  
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 font-sans flex flex-col">
@@ -536,11 +582,33 @@ const handleExportPDF = () => {
 // --- SUB-COMPONENT FOR CREATING & EDITING REPORTS WITH PHOTOS & VOICE ---
 function ReportFormView({ selectedReport, activeProject, profile, showToast, onSave, onCancel }) {
   const [title, setTitle] = useState(selectedReport?.title || "Daily Site Log");
-  const [date, setDate] = useState(selectedReport?.date || "Oct 26, 2026");
-  const [weather, setWeather] = useState(selectedReport?.weather || "72°F, Clear / Sunny");
-  const [bullets, setBullets] = useState(
-    selectedReport?.bullets || "• Excavation of foundation area completed on schedule.\n• Subcontractor arrived at 08:00 AM with 6 workers.\n• Safety meeting held; no incidents reported today."
+  const [date, setDate] = useState(selectedReport ? toISO(selectedReport.date) : todayISO());
+const [weather, setWeather] = useState(selectedReport?.weather || "");
+
+// New reports only: fetch current local weather (free Open-Meteo service, no API key)
+useEffect(() => {
+  if (selectedReport || !navigator.geolocation || !navigator.onLine) return;
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      try {
+        const { latitude, longitude } = pos.coords;
+        const res = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&temperature_unit=fahrenheit`
+        );
+        const data = await res.json();
+        const temp = Math.round(data.current.temperature_2m);
+        const desc = describeWeather(data.current.weather_code);
+        // Only fill it in if the user hasn't already typed something
+        setWeather((prev) => prev || `${temp}°F, ${desc}`);
+      } catch (err) {
+        console.error("Weather lookup failed:", err);
+      }
+    },
+    () => {}, // location denied: the user can type the weather manually
+    { timeout: 10000 }
   );
+}, [selectedReport]);
+  const [bullets, setBullets] = useState(selectedReport?.bullets || "");
   
   // Photos State
   const [photos, setPhotos] = useState(selectedReport?.photos || []);
@@ -609,12 +677,10 @@ function ReportFormView({ selectedReport, activeProject, profile, showToast, onS
         }
       }
 
-      if (finalTranscript) {
-        setBullets((prev) => {
-          const cleanText = finalTranscript.trim();
-          return prev ? `${prev}\n• ${cleanText}` : `• ${cleanText}`;
-        });
-      }
+      const cleanText = finalTranscript.trim();
+      if (cleanText) {
+        setBullets((prev) => (prev ? `${prev}\n• ${cleanText}` : `• ${cleanText}`));
+    }
     };
 
     recognition.onerror = () => setIsRecording(false);
@@ -635,7 +701,7 @@ function ReportFormView({ selectedReport, activeProject, profile, showToast, onS
       id: selectedReport?.id || `rep-${Date.now()}`,
       projectId: selectedReport?.projectId || activeProject.id,
       title,
-      date,
+      date: toDisplay(date),
       weather,
       bullets,
       photos,
@@ -693,11 +759,11 @@ function ReportFormView({ selectedReport, activeProject, profile, showToast, onS
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">Date</label>
-            <input type="text" required value={date} onChange={(e) => setDate(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-teal-600" />
+            <input type="date" required value={date} onChange={(e) => setDate(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-teal-600" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">Weather Condition</label>
-            <input type="text" required value={weather} onChange={(e) => setWeather(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-teal-600" />
+            <input type="text" required placeholder="e.g. 72°F, Sunny" value={weather} onChange={(e) => setWeather(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-teal-600" />
           </div>
         </div>
 
@@ -799,4 +865,38 @@ function ReportFormView({ selectedReport, activeProject, profile, showToast, onS
       </form>
     </main>
   );
+}
+// --- Date helpers ---
+// The calendar input uses "2026-10-27"; reports store "Oct 27, 2026"
+function todayISO() {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 10);
+}
+
+function toISO(displayDate) {
+  const d = new Date(displayDate);
+  if (isNaN(d)) return todayISO();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 10);
+}
+
+function toDisplay(isoDate) {
+  return new Date(isoDate + "T00:00:00").toLocaleDateString("en-US", {
+    month: "short", day: "numeric", year: "numeric",
+  });
+}
+
+// --- Weather helper: turns Open-Meteo weather codes into words ---
+function describeWeather(code) {
+  if (code === 0) return "Clear";
+  if (code <= 2) return "Partly Cloudy";
+  if (code === 3) return "Overcast";
+  if (code <= 48) return "Fog";
+  if (code <= 57) return "Drizzle";
+  if (code <= 67) return "Rain";
+  if (code <= 77) return "Snow";
+  if (code <= 82) return "Rain Showers";
+  if (code <= 86) return "Snow Showers";
+  return "Thunderstorm";
 }
