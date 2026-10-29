@@ -235,7 +235,7 @@ export default function App() {
     }
   };
 
-    const handleDeleteProject = async () => {
+  const handleDeleteProject = async () => {
     // The dashboard needs at least one project
     if (projects.length <= 1) {
       showToast("You need at least one project. Add another before deleting this one.");
@@ -579,8 +579,8 @@ export default function App() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   {selectedReport.photos.map((photo) => (
                     <div key={photo.id} className="bg-slate-50 rounded-xl p-2 border border-slate-200 space-y-1.5">
-                      <div className="h-32 bg-slate-200 rounded-lg overflow-hidden">
-                        <img src={photo.url} alt={photo.caption} className="w-full h-full object-cover" />
+                      <div className="h-56 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center">
+                        <img src={photo.url} alt={photo.caption} className="max-w-full max-h-full object-contain" />
                       </div>
                       <p className="text-xs font-semibold text-slate-800 text-center truncate">{photo.caption}</p>
                     </div>
@@ -704,7 +704,7 @@ export default function App() {
               </div>
 
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
-                                {tempProject.id && (
+                {tempProject.id && (
                   <button
                     type="button"
                     onClick={handleDeleteProject}
@@ -779,23 +779,28 @@ function ReportFormView({ selectedReport, activeProject, profile, showToast, onS
   const [isRecording, setIsRecording] = useState(false);
   const [recognitionInstance, setRecognitionInstance] = useState(null);
 
-  // Handle Image File Upload & Base64 Conversion
-  const handleImageUpload = (e) => {
-    const files = Array.from(e.target.files);
+  // Handle Image Upload: shrink each photo before saving
+  const handleImageUpload = async (e) => {
+    const input = e.target;
+    const files = Array.from(input.files);
     if (!files.length) return;
 
-    files.forEach((file) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
+    for (const file of files) {
+      try {
+        const url = await compressImage(file);
         const newPhoto = {
           id: `photo-${Date.now()}-${Math.random()}`,
-          url: reader.result, // Base64 string for local storage
-          caption: file.name.replace(/\.[^/.]+$/, "") // Default caption to filename
+          url,
+          caption: file.name.replace(/\.[^/.]+$/, ""), // Default caption to filename
         };
         setPhotos((prev) => [...prev, newPhoto]);
-      };
-      reader.readAsDataURL(file);
-    });
+      } catch (err) {
+        console.error(err);
+        showToast(`Could not add photo: ${file.name}`);
+      }
+    }
+
+    input.value = ""; // lets the same photo be picked again if needed
   };
 
   const handleCaptionChange = (id, newCaption) => {
@@ -1060,4 +1065,35 @@ function describeWeather(code) {
   if (code <= 82) return "Rain Showers";
   if (code <= 86) return "Snow Showers";
   return "Thunderstorm";
+}
+
+// --- Photo helper: shrink a photo before saving ---
+async function compressImage(file, maxSize = 1600, quality = 0.7) {
+  // Convert iPhone HEIC photos to JPEG first (Windows browsers can't open HEIC)
+  if (/\.(heic|heif)$/i.test(file.name) || /image\/hei[cf]/i.test(file.type)) {
+    const { default: heic2any } = await import("heic2any");
+    const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 });
+    file = Array.isArray(converted) ? converted[0] : converted;
+  }
+
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      // Scale down so the longest side is at most 1600px (never scale up)
+      const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      // Save as JPEG at 70% quality
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Could not read image"));
+    };
+    img.src = url;
+  });
 }

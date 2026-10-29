@@ -11,7 +11,7 @@ A field-ready, offline-first Progressive Web App (PWA) for construction superint
 - **🗂️ Project Management** – Add, edit, and delete projects (name, code, location). The newest project appears as the first tab and opens by default. Deleting a project also deletes its reports, after a confirmation warning.
 - **📅 Smart Report Defaults** – New reports open with today's date (with a calendar picker to change it) and the current local weather, fetched automatically from your location. Both can be edited manually.
 - **🎙️ Hands-Free Voice Dictation** – Uses the Web Speech API to transcribe spoken notes directly into the daily log while walking the site. Each spoken phrase becomes a bullet point.
-- **📸 Photo Documentation & Labeling** – Add photos from the camera or device storage, store them offline, and attach trade or location captions.
+- **📸 Photo Documentation & Labeling** – Add photos from the camera or device storage, store them offline, and attach trade or location captions. Photos are automatically resized (max 1600px) and compressed to JPEG before saving, typically about 15–20× smaller (e.g., 2.7 MB → 159 KB). iPhone HEIC photos are converted automatically, so they also work in Windows browsers. In the report, photos are shown in full without cropping.
 - **📄 PDF Export** – Uses the browser's built-in print engine with custom print CSS to produce formatted daily report PDFs, with no external server required. After saving, the report opens straight to the preview, ready to export.
 - **👓 Readable on Phones** – Larger, darker text on phones for report previews, field notes, and form fields, tested with users of different ages. Form text is 16px, which also stops iPhones from auto-zooming when a field is tapped.
 - **⚡ Responsive, High-Contrast UI** – Built with React 18, Vite, and Tailwind CSS v4, with high contrast for outdoor visibility.
@@ -26,6 +26,7 @@ A field-ready, offline-first Progressive Web App (PWA) for construction superint
 | Offline Storage | IndexedDB via Dexie.js |
 | PWA / Offline | vite-plugin-pwa (service worker) |
 | Weather | Open-Meteo API (free, no API key) + browser Geolocation |
+| Photo Processing | Browser Canvas API (resize & compress) + heic2any (HEIC → JPEG) |
 | Speech-to-Text | Web Speech API (`SpeechRecognition`) |
 | PDF Export | Browser print engine (`window.print()` + `@media print`) |
 
@@ -122,7 +123,7 @@ npm run preview
 - [x] Open the saved report directly after saving
 - [x] Add, edit, and delete projects (newest project first)
 - [x] Larger, higher-contrast text for phone readability
-- [ ] Compress photos before saving to reduce storage use
+- [x] Compress photos before saving to reduce storage use (with HEIC support)
 - [ ] Data export/import backup
 - [ ] Cloud sync with Supabase (accounts, multi-device access, photo storage)
 - [ ] AI transcription trained on construction terminology, with offline recording that transcribes once back online
