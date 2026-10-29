@@ -8,13 +8,14 @@ A field-ready, offline-first Progressive Web App (PWA) for construction superint
 
 - **📱 Installable PWA** – Installs on iOS, Android, macOS, and Windows. Critical assets are cached locally, so the app opens and runs in job site dead zones with no cell service.
 - **💾 Offline Storage with IndexedDB** – Profiles, reports, and photos are stored in the browser's IndexedDB (via Dexie.js), which holds far more data than `localStorage`. The app only confirms a save after the data is actually stored, and existing `localStorage` data is migrated automatically.
+- **🛟 Backup & Restore (temporary)** – **Download Backup** saves the profile, all projects, and all reports (including photos) to a single `.json` file. **Restore Backup** checks that the file is a valid backup, asks for confirmation, and replaces the app's data in one all-or-nothing step. This is a stopgap for testing until cloud sync is added, and will be removed then.
 - **🗂️ Project Management** – Add, edit, and delete projects (name, code, location). The newest project appears as the first tab and opens by default. Deleting a project also deletes its reports, after a confirmation warning.
 - **📅 Smart Report Defaults** – New reports open with today's date (with a calendar picker to change it) and the current local weather, fetched automatically from your location. Both can be edited manually.
 - **🎙️ Hands-Free Voice Dictation** – Uses the Web Speech API to transcribe spoken notes directly into the daily log while walking the site. Each spoken phrase becomes a bullet point.
 - **📸 Photo Documentation & Labeling** – Add photos from the camera or device storage, store them offline, and attach trade or location captions. Photos are automatically resized (max 1600px) and compressed to JPEG before saving, typically about 15–20× smaller (e.g., 2.7 MB → 159 KB). iPhone HEIC photos are converted automatically, so they also work in Windows browsers. In the report, photos are shown in full without cropping.
 - **📄 PDF Export** – Uses the browser's built-in print engine with custom print CSS to produce formatted daily report PDFs, with no external server required. After saving, the report opens straight to the preview, ready to export.
 - **👓 Readable on Phones** – Larger, darker text on phones for report previews, field notes, and form fields, tested with users of different ages. Form text is 16px, which also stops iPhones from auto-zooming when a field is tapped.
-- **⚡ Responsive, High-Contrast UI** – Built with React 18, Vite, and Tailwind CSS v4, with high contrast for outdoor visibility.
+- **⚡ Responsive, High-Contrast UI** – Built with React 19, Vite, and Tailwind CSS v4, with high contrast for outdoor visibility.
 
 ## 🛠️ Tech Stack
 
@@ -106,13 +107,14 @@ npm run preview
 3. **Create a Daily Report** – Select a project and click **Add New Report**. Today's date and local weather fill in automatically (allow location access when prompted); change either if needed.
 4. **Voice Dictation** – Tap **Record** and speak your field observations. Each phrase is added as a bullet point.
 5. **Photos** – Click **+ Add Site Photo**, then add a caption (e.g., "Foundation Pour – Grid C4").
-6. **Save & Export** – Click **Save Report**. The finished report opens immediately; click **Export PDF Report** to save or print it.
+6. **Backup (testing only)** – Click **Download Backup** before making risky changes; use **Restore Backup** to put everything back.
+7. **Save & Export** – Click **Save Report**. The finished report opens immediately; click **Export PDF Report** to save or print it.
 
 ![Daily report view](docs/reportpage.png)
 
 ## ⚠️ Known Limitations
 
-- **Single device:** Data is stored only in the browser and device where it was entered. There is no cloud sync yet.
+- **Single device:** Data is stored only in the browser and device where it was entered. There is no cloud sync yet; use **Download Backup** to keep a copy.
 - **Voice dictation:** The browser's speech recognition does not know construction terminology (e.g., "FF&E" may be written as "FFNE"). In Chrome and Edge it usually requires an internet connection; it is not supported in Firefox, and support in Safari is limited.
 - **Weather:** Automatic weather requires location permission and an internet connection. Offline, the field stays blank for manual entry.
 
@@ -124,7 +126,7 @@ npm run preview
 - [x] Add, edit, and delete projects (newest project first)
 - [x] Larger, higher-contrast text for phone readability
 - [x] Compress photos before saving to reduce storage use (with HEIC support)
-- [ ] Data export/import backup
-- [ ] Cloud sync with Supabase (accounts, multi-device access, photo storage)
+- [x] Data export/import backup (temporary, for testing)
+- [ ] Cloud sync with Supabase (accounts, multi-device access, photo storage) – replaces the temporary backup buttons
 - [ ] AI transcription trained on construction terminology, with offline recording that transcribes once back online
 - [ ] Hosted deployment (accessible from any network)
