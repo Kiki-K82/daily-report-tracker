@@ -6,3 +6,8 @@ db.version(1).stores({
   reports: "id, projectId, date",
   profile: "id",
 });
+db.version(2).stores({
+  reports: "id, projectId, date",
+  profile: "id",
+  projects: "id",
+});

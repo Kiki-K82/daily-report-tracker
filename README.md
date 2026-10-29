@@ -8,10 +8,12 @@ A field-ready, offline-first Progressive Web App (PWA) for construction superint
 
 - **📱 Installable PWA** – Installs on iOS, Android, macOS, and Windows. Critical assets are cached locally, so the app opens and runs in job site dead zones with no cell service.
 - **💾 Offline Storage with IndexedDB** – Profiles, reports, and photos are stored in the browser's IndexedDB (via Dexie.js), which holds far more data than `localStorage`. The app only confirms a save after the data is actually stored, and existing `localStorage` data is migrated automatically.
+- **🗂️ Project Management** – Add, edit, and delete projects (name, code, location). The newest project appears as the first tab and opens by default. Deleting a project also deletes its reports, after a confirmation warning.
 - **📅 Smart Report Defaults** – New reports open with today's date (with a calendar picker to change it) and the current local weather, fetched automatically from your location. Both can be edited manually.
 - **🎙️ Hands-Free Voice Dictation** – Uses the Web Speech API to transcribe spoken notes directly into the daily log while walking the site. Each spoken phrase becomes a bullet point.
 - **📸 Photo Documentation & Labeling** – Add photos from the camera or device storage, store them offline, and attach trade or location captions.
 - **📄 PDF Export** – Uses the browser's built-in print engine with custom print CSS to produce formatted daily report PDFs, with no external server required. After saving, the report opens straight to the preview, ready to export.
+- **👓 Readable on Phones** – Larger, darker text on phones for report previews, field notes, and form fields, tested with users of different ages. Form text is 16px, which also stops iPhones from auto-zooming when a field is tapped.
 - **⚡ Responsive, High-Contrast UI** – Built with React 18, Vite, and Tailwind CSS v4, with high contrast for outdoor visibility.
 
 ## 🛠️ Tech Stack
@@ -67,7 +69,21 @@ Then open http://localhost:5173/ in your browser.
 
 ### Inspecting Stored Data
 
-Press **F12 → Application → IndexedDB → DailyReportTrackerDB** to see the `reports` and `profile` tables.
+Press **F12 → Application → IndexedDB → DailyReportTrackerDB** to see the `reports`, `profile`, and `projects` tables.
+
+## 📱 Testing on Your Phone
+
+**Phone view in the browser:** Press **F12**, then **Ctrl + Shift + M**, and choose a phone from the **Dimensions** dropdown.
+
+**On a real phone:** With the phone and laptop on the same Wi-Fi, start the server with:
+
+```bash
+npm run dev -- --host
+```
+
+Then open the **Network** address shown in the terminal (e.g., `http://192.168.1.25:5173/`) in the phone's browser.
+
+> ⚠️ **Note:** The microphone and automatic weather usually won't work this way, because phones only allow them on secure (https) sites. Layout and text sizes are accurate.
 
 ## 📲 Testing Offline Mode
 
@@ -85,10 +101,11 @@ npm run preview
 ## 📝 Usage Guide
 
 1. **Profile Setup** – Enter your company name and superintendent details.
-2. **Create a Daily Report** – Select a project and click **Add New Report**. Today's date and local weather fill in automatically (allow location access when prompted); change either if needed.
-3. **Voice Dictation** – Tap **Record** and speak your field observations. Each phrase is added as a bullet point.
-4. **Photos** – Click **+ Add Site Photo**, then add a caption (e.g., "Foundation Pour – Grid C4").
-5. **Save & Export** – Click **Save Report**. The finished report opens immediately; click **Export PDF Report** to save or print it.
+2. **Projects** – Click **Add Project** to create a project. Use the **pencil** next to the project code to edit or delete it.
+3. **Create a Daily Report** – Select a project and click **Add New Report**. Today's date and local weather fill in automatically (allow location access when prompted); change either if needed.
+4. **Voice Dictation** – Tap **Record** and speak your field observations. Each phrase is added as a bullet point.
+5. **Photos** – Click **+ Add Site Photo**, then add a caption (e.g., "Foundation Pour – Grid C4").
+6. **Save & Export** – Click **Save Report**. The finished report opens immediately; click **Export PDF Report** to save or print it.
 
 ![Daily report view](docs/reportpage.png)
 
@@ -103,8 +120,10 @@ npm run preview
 - [x] Move storage to IndexedDB (Dexie.js) for larger, more reliable offline storage
 - [x] Default to today's date with a calendar picker, and auto-fill local weather
 - [x] Open the saved report directly after saving
+- [x] Add, edit, and delete projects (newest project first)
+- [x] Larger, higher-contrast text for phone readability
 - [ ] Compress photos before saving to reduce storage use
 - [ ] Data export/import backup
 - [ ] Cloud sync with Supabase (accounts, multi-device access, photo storage)
 - [ ] AI transcription trained on construction terminology, with offline recording that transcribes once back online
-- [ ] Phone-optimized layout and hosted deployment
+- [ ] Hosted deployment (accessible from any network)

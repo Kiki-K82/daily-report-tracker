@@ -1,20 +1,20 @@
 import React, { useState, useEffect } from "react";
 import { db } from "./db";
-import { 
-  FileText, 
-  Mic, 
-  Plus, 
-  Trash2, 
-  Pencil, 
-  User, 
-  Calendar, 
-  Check, 
-  X, 
-  ChevronRight, 
-  ArrowLeft, 
-  Camera, 
-  Download, 
-  AlertCircle, 
+import {
+  FileText,
+  Mic,
+  Plus,
+  Trash2,
+  Pencil,
+  User,
+  Calendar,
+  Check,
+  X,
+  ChevronRight,
+  ArrowLeft,
+  Camera,
+  Download,
+  AlertCircle,
   Filter,
   Building2,
   Folder,
@@ -26,43 +26,48 @@ const DEFAULT_PROFILE = {
   company: "Apex Construction Inc.",
   role: "Senior Superintendent",
 };
+const DEFAULT_PROJECTS = [
+  { id: "proj-1", name: "Project Alpha", code: "PA-2026", location: "Downtown Plaza" },
+  { id: "proj-2", name: "Project Beta", code: "PB-2026", location: "Industrial Park" },
+  { id: "proj-3", name: "Project Gamma", code: "PG-2026", location: "Westside District" },
+];
 
 const SAMPLE_REPORTS = [
   {
-        id: "rep-101",
-        projectId: "proj-1",
-        date: "Oct 20, 2026",
-        title: "Foundation Pour & Rebar Inspection",
-        bullets: "• Completed foundation pour for Section 3.\n• Rebar inspection passed by city official.\n• Concrete pump truck arrived on site at 07:30 AM.",
-        weather: "72°F, Clear / Sunny",
-        prepBy: "Alex Johnson"
-      },
-      {
-        id: "rep-102",
-        projectId: "proj-1",
-        date: "Oct 19, 2026",
-        title: "Site Excavation & Underground Utilities",
-        bullets: "• Excavation ongoing at north quadrant.\n• Water main tie-in prepped.\n• Safety toolbox talk conducted prior to shift.",
-        weather: "68°F, Overcast",
-        prepBy: "Alex Johnson"
-      },
-      {
-        id: "rep-103",
-        projectId: "proj-2",
-        date: "Oct 20, 2026",
-        title: "Steel Framing & Crane Setup",
-        bullets: "• Structural steel erection started on grid lines A through D.\n• Mobile 50-ton crane inspected and operational.",
-        weather: "70°F, Sunny",
-        prepBy: "Alex Johnson"
-      }
+    id: "rep-101",
+    projectId: "proj-1",
+    date: "Oct 20, 2026",
+    title: "Foundation Pour & Rebar Inspection",
+    bullets: "• Completed foundation pour for Section 3.\n• Rebar inspection passed by city official.\n• Concrete pump truck arrived on site at 07:30 AM.",
+    weather: "72°F, Clear / Sunny",
+    prepBy: "Alex Johnson"
+  },
+  {
+    id: "rep-102",
+    projectId: "proj-1",
+    date: "Oct 19, 2026",
+    title: "Site Excavation & Underground Utilities",
+    bullets: "• Excavation ongoing at north quadrant.\n• Water main tie-in prepped.\n• Safety toolbox talk conducted prior to shift.",
+    weather: "68°F, Overcast",
+    prepBy: "Alex Johnson"
+  },
+  {
+    id: "rep-103",
+    projectId: "proj-2",
+    date: "Oct 20, 2026",
+    title: "Steel Framing & Crane Setup",
+    bullets: "• Structural steel erection started on grid lines A through D.\n• Mobile 50-ton crane inspected and operational.",
+    weather: "70°F, Sunny",
+    prepBy: "Alex Johnson"
+  }
 ];
 
 export default function App() {
   const todayFormatted = toDisplay(todayISO());
 
-const reportRef = React.useRef(null);
+  const reportRef = React.useRef(null);
 
-const handleExportPDF = () => {
+  const handleExportPDF = () => {
     showToast("Opening print dialog... Select 'Save as PDF'");
     window.print();
   };
@@ -74,53 +79,61 @@ const handleExportPDF = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [toastMessage, setToastMessage] = useState("");
 
-const [profile, setProfile] = useState(DEFAULT_PROFILE);
-const [reports, setReports] = useState([]);
-const [isLoaded, setIsLoaded] = useState(false);
-const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
-const [tempProfile, setTempProfile] = useState({ ...profile });
+  const [profile, setProfile] = useState(DEFAULT_PROFILE);
+  const [reports, setReports] = useState([]);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [tempProfile, setTempProfile] = useState({ ...profile });
+  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+  const [tempProject, setTempProject] = useState({ id: null, name: "", code: "", location: "" });
 
-// Load data from IndexedDB once when the app opens
-useEffect(() => {
-  async function loadData() {
-    try {
-      // Ask the browser not to auto-delete our data when space runs low
-      if (navigator.storage?.persist) await navigator.storage.persist();
+  // Load data from IndexedDB once when the app opens
+  useEffect(() => {
+    async function loadData() {
+      try {
+        // Ask the browser not to auto-delete our data when space runs low
+        if (navigator.storage?.persist) await navigator.storage.persist();
 
-      // One-time move of old localStorage data into IndexedDB
-      const oldReports = localStorage.getItem("apex_daily_reports");
-      const oldProfile = localStorage.getItem("apex_user_profile");
-      if (oldReports) await db.reports.bulkPut(JSON.parse(oldReports));
-      if (oldProfile) await db.profile.put({ id: "me", ...JSON.parse(oldProfile) });
-      localStorage.removeItem("apex_daily_reports");
-      localStorage.removeItem("apex_user_profile");
+        // One-time move of old localStorage data into IndexedDB
+        const oldReports = localStorage.getItem("apex_daily_reports");
+        const oldProfile = localStorage.getItem("apex_user_profile");
+        if (oldReports) await db.reports.bulkPut(JSON.parse(oldReports));
+        if (oldProfile) await db.profile.put({ id: "me", ...JSON.parse(oldProfile) });
+        localStorage.removeItem("apex_daily_reports");
+        localStorage.removeItem("apex_user_profile");
 
-      const savedProfile = await db.profile.get("me");
-      if (savedProfile) {
-        const { id, ...rest } = savedProfile;
-        setProfile(rest);
-        setReports(await db.reports.reverse().toArray());
-      } else {
-        // Very first run: save the defaults and sample reports
-        await db.profile.put({ id: "me", ...DEFAULT_PROFILE });
-        await db.reports.bulkPut(SAMPLE_REPORTS);
-        setReports(SAMPLE_REPORTS);
+        const savedProfile = await db.profile.get("me");
+        if (savedProfile) {
+          const { id, ...rest } = savedProfile;
+          setProfile(rest);
+          setReports(await db.reports.reverse().toArray());
+        } else {
+          // Very first run: save the defaults and sample reports
+          await db.profile.put({ id: "me", ...DEFAULT_PROFILE });
+          await db.reports.bulkPut(SAMPLE_REPORTS);
+          setReports(SAMPLE_REPORTS);
+        }
+        // Load projects (first time: save the 3 default projects)
+        const savedProjects = await db.projects.toArray();
+        if (savedProjects.length > 0) {
+          // Newest Project First-Keep projects in the order they were created
+          savedProjects.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+          setProjects(savedProjects);
+          setActiveTab(savedProjects[0].id);
+        } else {
+          await db.projects.bulkPut(DEFAULT_PROJECTS);
+        }
+      } catch (err) {
+        console.error("Failed to load data:", err);
+      } finally {
+        setIsLoaded(true);
       }
-    } catch (err) {
-      console.error("Failed to load data:", err);
-    } finally {
-      setIsLoaded(true);
     }
-  }
-  loadData();
-}, []);
+    loadData();
+  }, []);
 
-  // Projects State (Static)
-  const [projects] = useState([
-    { id: "proj-1", name: "Project Alpha", code: "PA-2026", location: "Downtown Plaza" },
-    { id: "proj-2", name: "Project Beta", code: "PB-2026", location: "Industrial Park" },
-    { id: "proj-3", name: "Project Gamma", code: "PG-2026", location: "Westside District" }
-  ]);
+  // Projects State (saved in IndexedDB)
+  const [projects, setProjects] = useState(DEFAULT_PROJECTS);
 
 
   // Toast Helper
@@ -140,74 +153,134 @@ useEffect(() => {
     setActiveView("view_report");
   };
 
-const handleDeleteReport = async (id, title) => {
-  if (!window.confirm(`Are you sure you want to delete "${title}"?`)) return;
-  try {
-    await db.reports.delete(id);
-    setReports((prev) => prev.filter((r) => r.id !== id));
-    showToast("Report deleted successfully.");
-    if (selectedReport?.id === id) {
-      setSelectedReport(null);
-      setActiveView("dashboard");
+  const handleDeleteReport = async (id, title) => {
+    if (!window.confirm(`Are you sure you want to delete "${title}"?`)) return;
+    try {
+      await db.reports.delete(id);
+      setReports((prev) => prev.filter((r) => r.id !== id));
+      showToast("Report deleted successfully.");
+      if (selectedReport?.id === id) {
+        setSelectedReport(null);
+        setActiveView("dashboard");
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("Could not delete report. Please try again.");
     }
-  } catch (err) {
-    console.error(err);
-    showToast("Could not delete report. Please try again.");
-  }
-};
+  };
 
-const handleSaveReport = async (reportData) => {
-  try {
-    await db.reports.put(reportData);
-    setReports((prevReports) => {
-      const exists = prevReports.some((r) => r.id === reportData.id);
-      return exists
-        ? prevReports.map((r) => (r.id === reportData.id ? reportData : r))
-        : [reportData, ...prevReports];
-    });
-    showToast(selectedReport ? "Report updated successfully!" : "New report created successfully!");
-    setSelectedReport(reportData);
-    setActiveView("view_report");
-  } catch (err) {
-    console.error(err);
-    showToast("Save failed: storage may be full. Report not saved.");
-  }
-};
+  const handleSaveReport = async (reportData) => {
+    try {
+      await db.reports.put(reportData);
+      setReports((prevReports) => {
+        const exists = prevReports.some((r) => r.id === reportData.id);
+        return exists
+          ? prevReports.map((r) => (r.id === reportData.id ? reportData : r))
+          : [reportData, ...prevReports];
+      });
+      showToast(selectedReport ? "Report updated successfully!" : "New report created successfully!");
+      setSelectedReport(reportData);
+      setActiveView("view_report");
+    } catch (err) {
+      console.error(err);
+      showToast("Save failed: storage may be full. Report not saved.");
+    }
+  };
 
-const handleSaveProfile = async (e) => {
-  e.preventDefault();
-  try {
-    await db.profile.put({ id: "me", ...tempProfile });
-    setProfile({ ...tempProfile });
-    setIsEditProfileOpen(false);
-    showToast("Profile updated successfully!");
-  } catch (err) {
-    console.error(err);
-    showToast("Could not save profile.");
-  }
-};
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
+    try {
+      await db.profile.put({ id: "me", ...tempProfile });
+      setProfile({ ...tempProfile });
+      setIsEditProfileOpen(false);
+      showToast("Profile updated successfully!");
+    } catch (err) {
+      console.error(err);
+      showToast("Could not save profile.");
+    }
+  };
 
   const handleOpenEditProfile = () => {
     setTempProfile({ ...profile });
     setIsEditProfileOpen(true);
   };
+  // --- Project handlers ---
+  const handleOpenAddProject = () => {
+    setTempProject({ id: null, name: "", code: "", location: "" });
+    setIsProjectModalOpen(true);
+  };
+
+  const handleOpenEditProject = () => {
+    setTempProject({ ...activeProject });
+    setIsProjectModalOpen(true);
+  };
+
+  const handleSaveProject = async (e) => {
+    e.preventDefault();
+    const isNew = !tempProject.id;
+    const projectData = isNew
+      ? { ...tempProject, id: `proj-${Date.now()}`, createdAt: Date.now() }
+      : { ...tempProject };
+    try {
+      await db.projects.put(projectData);
+      setProjects((prev) =>
+        isNew ? [projectData, ...prev] : prev.map((p) => (p.id === projectData.id ? projectData : p))
+      );
+      setActiveTab(projectData.id);
+      setIsProjectModalOpen(false);
+      showToast(isNew ? "Project added successfully!" : "Project updated successfully!");
+    } catch (err) {
+      console.error(err);
+      showToast("Could not save project.");
+    }
+  };
+
+    const handleDeleteProject = async () => {
+    // The dashboard needs at least one project
+    if (projects.length <= 1) {
+      showToast("You need at least one project. Add another before deleting this one.");
+      return;
+    }
+
+    const count = reports.filter((r) => r.projectId === tempProject.id).length;
+    const message = `Delete "${tempProject.name}" and its ${count} report(s)? This cannot be undone.`;
+    if (!window.confirm(message)) return;
+
+    try {
+      // Delete the project and its reports together
+      await db.transaction("rw", db.projects, db.reports, async () => {
+        await db.reports.where("projectId").equals(tempProject.id).delete();
+        await db.projects.delete(tempProject.id);
+      });
+
+      const remaining = projects.filter((p) => p.id !== tempProject.id);
+      setProjects(remaining);
+      setReports((prev) => prev.filter((r) => r.projectId !== tempProject.id));
+      setActiveTab(remaining[0].id); // open the newest remaining project
+      setIsProjectModalOpen(false);
+      showToast("Project deleted.");
+    } catch (err) {
+      console.error(err);
+      showToast("Could not delete project. Please try again.");
+    }
+  };
 
   const activeProject = projects.find((p) => p.id === activeTab) || projects[0];
   const projectReports = reports
     .filter((r) => r.projectId === activeTab)
-    .filter((r) => 
-      r.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    .filter((r) =>
+      r.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       r.date.toLowerCase().includes(searchQuery.toLowerCase()) ||
       r.bullets.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-if (!isLoaded) {
-  return (
-    <div className="min-h-screen flex items-center justify-center text-slate-500">
-      Loading reports...
-    </div>
-  );
-}  
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-slate-500">
+        Loading reports...
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 font-sans flex flex-col">
@@ -282,6 +355,12 @@ if (!isLoaded) {
               <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
                 <Folder className="w-4 h-4 text-teal-700" /> Active Projects
               </h3>
+              <button
+                onClick={handleOpenAddProject}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-teal-800 bg-white border border-slate-300 rounded-xl hover:bg-teal-50 transition"
+              >
+                <Plus className="w-4 h-4" /> Add Project
+              </button>
             </div>
 
             <div className="flex space-x-2 border-b border-slate-300 overflow-x-auto pb-1 scrollbar-none">
@@ -292,11 +371,10 @@ if (!isLoaded) {
                   <button
                     key={proj.id}
                     onClick={() => setActiveTab(proj.id)}
-                    className={`px-5 py-3 rounded-t-xl font-semibold text-sm transition flex items-center gap-2.5 whitespace-nowrap border-t border-x ${
-                      isActive
-                        ? "bg-white text-teal-900 border-slate-300 border-b-white font-bold shadow-sm -mb-[1px]"
-                        : "bg-slate-200/80 text-slate-600 hover:bg-slate-300/80 border-transparent"
-                    }`}
+                    className={`px-5 py-3 rounded-t-xl font-semibold text-sm transition flex items-center gap-2.5 whitespace-nowrap border-t border-x ${isActive
+                      ? "bg-white text-teal-900 border-slate-300 border-b-white font-bold shadow-sm -mb-[1px]"
+                      : "bg-slate-200/80 text-slate-600 hover:bg-slate-300/80 border-transparent"
+                      }`}
                   >
                     <span>{proj.name}</span>
                     <span className={`px-2 py-0.5 rounded-full text-xs ${isActive ? "bg-teal-100 text-teal-800" : "bg-slate-300 text-slate-700"}`}>
@@ -314,6 +392,13 @@ if (!isLoaded) {
                   <div className="flex items-center gap-2">
                     <h2 className="text-2xl font-bold text-slate-900">{activeProject.name}</h2>
                     <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md font-mono border border-slate-200">{activeProject.code}</span>
+                    <button
+                      onClick={handleOpenEditProject}
+                      title="Edit Project"
+                      className="p-2 text-slate-600 hover:text-teal-800 hover:bg-teal-100 rounded-lg transition"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
                   </div>
                   <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
                     <span>Location: {activeProject.location}</span>
@@ -375,10 +460,10 @@ if (!isLoaded) {
                             <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 text-teal-700 transition" />
                           </h4>
                         </div>
-                        <p className="text-xs text-slate-600 line-clamp-1 pr-4 whitespace-pre-line">
+                        <p className="text-base md:text-sm text-slate-600 line-clamp-1 pr-4 whitespace-pre-line">
                           {report.bullets}
                         </p>
-                        <div className="flex items-center gap-3 text-[11px] text-slate-500 font-medium">
+                        <div className="flex flex-wrap items-center gap-3 text-sm md:text-xs text-slate-600 font-medium">
                           <span>Weather: {report.weather}</span>
                           <span>•</span>
                           <span>By: {report.prepBy}</span>
@@ -430,7 +515,7 @@ if (!isLoaded) {
           onSave={handleSaveReport}
           onCancel={() => setActiveView("dashboard")}
         />
-) : (
+      ) : (
         /* Detailed Report PDF Preview View */
         <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-6 space-y-6">
           <div className="flex items-center justify-between">
@@ -448,7 +533,7 @@ if (!isLoaded) {
             </button>
           </div>
 
-         {/* Printable Report Container */}
+          {/* Printable Report Container */}
           <div ref={reportRef} className="print-container bg-white rounded-2xl p-8 shadow-md border border-slate-200 space-y-6">
             <div className="border-b-2 border-teal-900 pb-4 flex justify-between items-start">
               <div>
@@ -482,7 +567,7 @@ if (!isLoaded) {
 
             <div>
               <h3 className="text-sm font-bold text-slate-900 mb-2 border-b border-slate-200 pb-1">Field Notes</h3>
-              <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <p className="text-base text-slate-800 leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-200">
                 {selectedReport?.bullets}
               </p>
             </div>
@@ -570,6 +655,82 @@ if (!isLoaded) {
           </div>
         </div>
       )}
+      {/* Project Add/Edit Modal */}
+      {isProjectModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 border border-slate-200">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-lg text-slate-900">
+                {tempProject.id ? "Edit Project" : "Add New Project"}
+              </h3>
+              <button onClick={() => setIsProjectModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveProject} className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">Project Name</label>
+                <input
+                  type="text"
+                  required
+                  value={tempProject.name}
+                  onChange={(e) => setTempProject({ ...tempProject, name: e.target.value })}
+                  placeholder="e.g. Marriott Downtown Refurbishment"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-base font-medium focus:ring-2 focus:ring-teal-600 focus:bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">Project Code</label>
+                <input
+                  type="text"
+                  value={tempProject.code}
+                  onChange={(e) => setTempProject({ ...tempProject, code: e.target.value })}
+                  placeholder="e.g. MD-2026"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-base font-medium focus:ring-2 focus:ring-teal-600 focus:bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">Location</label>
+                <input
+                  type="text"
+                  value={tempProject.location}
+                  onChange={(e) => setTempProject({ ...tempProject, location: e.target.value })}
+                  placeholder="e.g. Orlando, FL"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-base font-medium focus:ring-2 focus:ring-teal-600 focus:bg-white"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                                {tempProject.id && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteProject}
+                    className="mr-auto flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-red-700 bg-red-50 border border-red-200 rounded-xl hover:bg-red-100 transition"
+                  >
+                    <Trash2 className="w-4 h-4" /> Delete
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsProjectModalOpen(false)}
+                  className="px-5 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-200 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-teal-700 text-white rounded-xl text-sm font-bold hover:bg-teal-800 transition"
+                >
+                  {tempProject.id ? "Save Changes" : "Add Project"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Footer Bar */}
       <footer className="bg-slate-900 text-slate-400 text-xs py-4 px-4 text-center border-t border-slate-800 mt-auto">
@@ -583,33 +744,33 @@ if (!isLoaded) {
 function ReportFormView({ selectedReport, activeProject, profile, showToast, onSave, onCancel }) {
   const [title, setTitle] = useState(selectedReport?.title || "Daily Site Log");
   const [date, setDate] = useState(selectedReport ? toISO(selectedReport.date) : todayISO());
-const [weather, setWeather] = useState(selectedReport?.weather || "");
+  const [weather, setWeather] = useState(selectedReport?.weather || "");
 
-// New reports only: fetch current local weather (free Open-Meteo service, no API key)
-useEffect(() => {
-  if (selectedReport || !navigator.geolocation || !navigator.onLine) return;
-  navigator.geolocation.getCurrentPosition(
-    async (pos) => {
-      try {
-        const { latitude, longitude } = pos.coords;
-        const res = await fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&temperature_unit=fahrenheit`
-        );
-        const data = await res.json();
-        const temp = Math.round(data.current.temperature_2m);
-        const desc = describeWeather(data.current.weather_code);
-        // Only fill it in if the user hasn't already typed something
-        setWeather((prev) => prev || `${temp}°F, ${desc}`);
-      } catch (err) {
-        console.error("Weather lookup failed:", err);
-      }
-    },
-    () => {}, // location denied: the user can type the weather manually
-    { timeout: 10000 }
-  );
-}, [selectedReport]);
+  // New reports only: fetch current local weather (free Open-Meteo service, no API key)
+  useEffect(() => {
+    if (selectedReport || !navigator.geolocation || !navigator.onLine) return;
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords;
+          const res = await fetch(
+            `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&temperature_unit=fahrenheit`
+          );
+          const data = await res.json();
+          const temp = Math.round(data.current.temperature_2m);
+          const desc = describeWeather(data.current.weather_code);
+          // Only fill it in if the user hasn't already typed something
+          setWeather((prev) => prev || `${temp}°F, ${desc}`);
+        } catch (err) {
+          console.error("Weather lookup failed:", err);
+        }
+      },
+      () => { }, // location denied: the user can type the weather manually
+      { timeout: 10000 }
+    );
+  }, [selectedReport]);
   const [bullets, setBullets] = useState(selectedReport?.bullets || "");
-  
+
   // Photos State
   const [photos, setPhotos] = useState(selectedReport?.photos || []);
   const fileInputRef = React.useRef(null);
@@ -680,7 +841,7 @@ useEffect(() => {
       const cleanText = finalTranscript.trim();
       if (cleanText) {
         setBullets((prev) => (prev ? `${prev}\n• ${cleanText}` : `• ${cleanText}`));
-    }
+      }
     };
 
     recognition.onerror = () => setIsRecording(false);
@@ -750,20 +911,20 @@ useEffect(() => {
         {/* Header Form Inputs */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">Contractor</label>
-            <input type="text" readOnly value={profile.company} className="w-full bg-slate-100 border border-slate-200 rounded-lg p-2 text-xs font-medium text-slate-700 cursor-not-allowed" />
+            <label className="block text-sm font-semibold text-slate-700 mb-1">Contractor</label>
+            <input type="text" readOnly value={profile.company} className="w-full bg-slate-100 border border-slate-200 rounded-lg p-3 text-base font-medium text-slate-800 cursor-not-allowed" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">Report Preparer</label>
-            <input type="text" readOnly value={selectedReport?.prepBy || profile.name} className="w-full bg-slate-100 border border-slate-200 rounded-lg p-2 text-xs font-medium text-slate-700 cursor-not-allowed" />
+            <label className="block text-sm font-semibold text-slate-700 mb-1">Report Preparer</label>
+            <input type="text" readOnly value={selectedReport?.prepBy || profile.name} className="w-full bg-slate-100 border border-slate-200 rounded-lg p-3 text-base font-medium text-slate-800 cursor-not-allowed" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">Date</label>
-            <input type="date" required value={date} onChange={(e) => setDate(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-teal-600" />
+            <label className="block text-sm font-semibold text-slate-700 mb-1">Date</label>
+            <input type="date" required value={date} onChange={(e) => setDate(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg p-3 text-base font-medium text-slate-800 focus:ring-2 focus:ring-teal-600" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">Weather Condition</label>
-            <input type="text" required placeholder="e.g. 72°F, Sunny" value={weather} onChange={(e) => setWeather(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-teal-600" />
+            <label className="block text-sm font-semibold text-slate-700 mb-1">Weather Condition</label>
+            <input type="text" required placeholder="e.g. 72°F, Sunny" value={weather} onChange={(e) => setWeather(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg p-3 text-base font-medium text-slate-800 focus:ring-2 focus:ring-teal-600" />
           </div>
         </div>
 
@@ -774,7 +935,7 @@ useEffect(() => {
           </div>
           <div>
             <h3 className="font-bold text-lg">{isRecording ? "Listening to Field Notes..." : "Hands-Free Voice AI Assistant"}</h3>
-            <p className="text-xs text-slate-300 max-w-md mx-auto mt-1">
+            <p className="text-base text-slate-100 max-w-md mx-auto mt-1">
               {isRecording ? "Speak naturally into your microphone. Text will append below automatically." : "Tap record and speak site notes naturally to generate bullet points."}
             </p>
           </div>
@@ -794,10 +955,10 @@ useEffect(() => {
         <div className="space-y-2">
           <label className="block text-sm font-bold text-slate-800">AI Bulletin Report Summary</label>
           <textarea
-            rows={4}
+            rows={6}
             value={bullets}
             onChange={(e) => setBullets(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-sm text-slate-800 focus:ring-2 focus:ring-teal-600 focus:bg-white"
+            className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-base text-slate-800 focus:ring-2 focus:ring-teal-600 focus:bg-white"
             placeholder="AI-generated transcript summary will populate here..."
           />
         </div>
@@ -807,7 +968,7 @@ useEffect(() => {
           <label className="block text-sm font-bold text-slate-800">
             Photo Documentation with Labels ({photos.length})
           </label>
-          
+
           <input
             type="file"
             ref={fileInputRef}
