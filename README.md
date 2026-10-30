@@ -6,7 +6,7 @@ A field-ready, offline-first Progressive Web App (PWA) for construction superint
 
 ## 🌟 Key Features
 
-- **📱 Installable PWA** – Installs on iOS, Android, macOS, and Windows. Critical assets are cached locally, so the app opens and runs in job site dead zones with no cell service.
+- **📱 Installable PWA** – Installs on iOS, Android, macOS, and Windows with its own app icon and home-screen name ("Daily Reports"). Critical assets and icons are cached locally, so the app opens and runs in job site dead zones with no cell service.
 - **💾 Offline Storage with IndexedDB** – Profiles, reports, and photos are stored in the browser's IndexedDB (via Dexie.js), which holds far more data than `localStorage`. The app only confirms a save after the data is actually stored, and existing `localStorage` data is migrated automatically.
 - **🛟 Backup & Restore (temporary)** – **Download Backup** saves the profile, all projects, and all reports (including photos) to a single `.json` file. **Restore Backup** checks that the file is a valid backup, asks for confirmation, and replaces the app's data in one all-or-nothing step. This is a stopgap for testing until cloud sync is added, and will be removed then.
 - **🗂️ Project Management** – Add, edit, and delete projects (name, code, location). The newest project appears as the first tab and opens by default. Deleting a project also deletes its reports, after a confirmation warning.
@@ -37,7 +37,11 @@ A field-ready, offline-first Progressive Web App (PWA) for construction superint
 daily-report-tracker/
 ├── docs/                  # README screenshots
 ├── public/
-│   ├── favicon.svg
+│   ├── favicon.svg            # K logo (browser tab & app header)
+│   ├── apple-touch-icon.png   # iPhone/iPad home-screen icon (180×180)
+│   ├── pwa-192x192.png        # Android home-screen icon
+│   ├── pwa-512x512.png        # Android splash screen / large icon
+│   ├── maskable-512x512.png   # Android icon for circle/rounded crops
 │   └── icons.svg
 ├── src/
 │   ├── App.jsx            # Main component, views & state management
@@ -129,4 +133,5 @@ npm run preview
 - [x] Data export/import backup (temporary, for testing)
 - [ ] Cloud sync with Supabase (accounts, multi-device access, photo storage) – replaces the temporary backup buttons
 - [ ] AI transcription trained on construction terminology, with offline recording that transcribes once back online
-- [ ] Hosted deployment (accessible from any network)
+- [x] Hosted deployment on Netlify (accessible from any network)
+- [x] Custom app icons and PWA manifest (installable with its own icon)

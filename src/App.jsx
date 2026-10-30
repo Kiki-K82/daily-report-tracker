@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { db } from "./db";
 import {
-  FileText,
   Mic,
   Plus,
   Trash2,
@@ -377,9 +376,7 @@ export default function App() {
       <header className="bg-teal-900 text-white shadow-md border-b border-teal-800">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-teal-800 rounded-lg text-teal-300">
-              <FileText className="w-6 h-6" />
-            </div>
+            <img src="/favicon.svg" alt="Daily Report Tracker logo" className="w-10 h-10 rounded-lg" />
             <div>
               <h1 className="font-bold text-lg tracking-wide leading-none">Daily Report Tracker</h1>
               <p className="text-xs text-teal-300 font-light mt-0.5">Field Inspection & AI Dictation</p>

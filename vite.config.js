@@ -9,25 +9,18 @@ export default defineConfig({
     tailwindcss(), // Keeps your Tailwind CSS v4 styles active
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'robots.txt', 'apple-touch-icon.png'],
+      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'Daily Report Tracker',
-        short_name: 'ReportTracker',
+        short_name: 'Daily Reports',
         description: 'Field Inspection & Construction Daily Report Tracker',
-        theme_color: '#0f766e',
+        theme_color: '#134e4a',
         background_color: '#f8fafc',
         display: 'standalone',
         icons: [
-          {
-            src: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
-            sizes: '192x192',
-            type: 'image/png'
-          },
-          {
-            src: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
-            sizes: '512x512',
-            type: 'image/png'
-          }
+          { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
+          { src: 'maskable-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
         ]
       }
     })
