@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { db } from "./db";
+import { supabase } from "./supabase";
+import AuthScreen from "./AuthScreen";
 import {
   Mic,
   Plus,
@@ -18,7 +20,8 @@ import {
   Building2,
   Folder,
   Search,
-  Upload
+  Upload,
+  LogOut
 } from "lucide-react";
 
 const DEFAULT_PROFILE = {
@@ -134,7 +137,23 @@ export default function App() {
 
   // Projects State (saved in IndexedDB)
   const [projects, setProjects] = useState(DEFAULT_PROJECTS);
+  // --- Login session (who is signed in) ---
+  const [session, setSession] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
 
+  useEffect(() => {
+    // Check if someone is already signed in on this device
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setAuthChecked(true);
+    });
+
+    // Update automatically when someone signs in or out
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   // Toast Helper
   const showToast = (msg) => {
@@ -344,6 +363,12 @@ export default function App() {
       showToast("Could not restore backup. The file may be damaged.");
     }
   };
+  // --- Sign out ---
+  const handleSignOut = async () => {
+    if (!window.confirm("Sign out of Daily Report Tracker?")) return;
+    const { error } = await supabase.auth.signOut();
+    if (error) showToast("Could not sign out. Please try again.");
+  };
 
   const activeProject = projects.find((p) => p.id === activeTab) || projects[0];
   const projectReports = reports
@@ -353,7 +378,17 @@ export default function App() {
       r.date.toLowerCase().includes(searchQuery.toLowerCase()) ||
       r.bullets.toLowerCase().includes(searchQuery.toLowerCase())
     );
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-slate-500">
+        Checking sign-in...
+      </div>
+    );
+  }
 
+  if (!session) {
+    return <AuthScreen />;
+  }
   if (!isLoaded) {
     return (
       <div className="min-h-screen flex items-center justify-center text-slate-500">
@@ -443,6 +478,13 @@ export default function App() {
                   className="hidden"
                 />
               </label>
+              <button
+                onClick={handleSignOut}
+                className="px-4 py-2 bg-white hover:bg-red-50 text-red-700 font-medium rounded-xl text-sm transition flex items-center gap-2 border border-red-200"
+              >
+                <LogOut className="w-4 h-4" />
+                Sign Out
+              </button>
             </div>
           </section>
 
