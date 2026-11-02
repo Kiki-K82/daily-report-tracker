@@ -7,11 +7,11 @@ A field-ready, offline-first Progressive Web App (PWA) for construction superint
 ## 🌟 Key Features
 
 - **📱 Installable PWA** – Installs on iOS, Android, macOS, and Windows with its own app icon and home-screen name ("Daily Reports"). Critical assets and icons are cached locally, so the app opens and runs in job site dead zones with no cell service.
-- **🔐 Accounts & Login** – Email and password sign-up with email confirmation (Supabase Auth). Users stay signed in on their device, and the sign-in check works offline. Row Level Security ensures each user can only see and change their own data.
+- **🔐 Accounts & Login** – Email and password sign-up with email confirmation (Supabase Auth), plus **Forgot password** (reset link by email, then a Set New Password screen). Users stay signed in on their device, and the sign-in check works offline. Row Level Security ensures each user can only see and change their own data.
 - **☁️ Offline-First Cloud Sync** – Every change is saved on the device first, marked as unsent, and synced to Supabase automatically: when the app opens, a few seconds after each change, when the connection returns after a dead zone, and every 5 minutes (plus a manual **Sync Now** button). Changes from other devices are downloaded, the newest version wins, and unsent local edits are never overwritten. Deletions sync too.
 - **🚪 Safe Sign-Out** – Signing out sends any unsent changes first, warns if something couldn't be sent, then clears the device so the next person can't see the previous user's reports. Data returns automatically on the next sign-in.
 - **💾 Offline Storage with IndexedDB** – Profiles, reports, and photos are stored on the device in IndexedDB (via Dexie.js), so the app works fully without signal. The app only confirms a save after the data is actually stored.
-- **🛟 Backup & Restore (temporary)** – **Download Backup** saves the profile, all projects, and all reports (including photos) to a single `.json` file. **Restore Backup** checks the file, asks for confirmation, and replaces the device's data in one all-or-nothing step. Kept for testing only; to be removed now that cloud sync exists.
+- **🖼️ Cloud Photo Storage** – Photos are uploaded once to a private Supabase Storage bucket (one folder per user, protected by a security policy) and downloaded only on devices that don't have them yet. Reports in the cloud store just each photo's ID, caption, and location. Removing a photo, deleting a report, or deleting a project also deletes the photo files from Storage.
 - **🗂️ Project Management** – Add, edit, and delete projects (name, code, location). The newest project appears as the first tab and opens by default. Deleting a project also deletes its reports, after a confirmation warning.
 - **📅 Smart Report Defaults** – New reports open with today's date (with a calendar picker to change it) and the current local weather, fetched automatically from your location. Both can be edited manually.
 - **🎙️ Hands-Free Voice Dictation** – Uses the Web Speech API to transcribe spoken notes directly into the daily log while walking the site. Each spoken phrase becomes a bullet point.
@@ -28,7 +28,7 @@ A field-ready, offline-first Progressive Web App (PWA) for construction superint
 | Styling | Tailwind CSS v4 |
 | Icons | Lucide React |
 | Offline Storage | IndexedDB via Dexie.js |
-| Backend & Auth | Supabase (Postgres, Auth, Row Level Security) via `@supabase/supabase-js` |
+| Backend & Auth | Supabase (Postgres, Auth, Row Level Security, Storage) via `@supabase/supabase-js` |
 | Hosting | Netlify (auto-deploys from GitHub `main`) |
 | PWA / Offline | vite-plugin-pwa (service worker) |
 | Weather | Open-Meteo API (free, no API key) + browser Geolocation |
@@ -50,7 +50,7 @@ daily-report-tracker/
 │   └── icons.svg
 ├── src/
 │   ├── App.jsx            # Main component, views & state management
-│   ├── AuthScreen.jsx     # Sign-in / create-account screen
+│   ├── AuthScreen.jsx     # Sign-in, create-account, forgot & set-new-password screens
 │   ├── db.js              # IndexedDB database setup (Dexie.js)
 │   ├── supabase.js        # Supabase connection
 │   ├── sync.js            # Offline-first cloud sync (send & receive)
@@ -104,7 +104,7 @@ Open http://localhost:5173/ in your browser.
 
 Press **F12 → Application → IndexedDB → DailyReportTrackerDB** to see the `reports`, `profile`, `projects`, `deletions`, and `meta` tables. Records with `dirty: 1` haven't been sent to the cloud yet. Use **Refresh database** to update the view (never **Delete database**).
 
-Cloud data is in the Supabase dashboard under **Table Editor** (`projects`, `reports`, `profiles`).
+Cloud data is in the Supabase dashboard under **Table Editor** (`projects`, `reports`, `profiles`). Photo files are under **Storage → photos**, organized as `user-id/report-id/photo-id.jpg`.
 
 **Testing sync on one laptop:** An InPrivate/Incognito window has its own storage, so it acts like a second device. Sign in with the same account in both windows.
 
@@ -137,7 +137,7 @@ npm run preview
 
 ## 📝 Usage Guide
 
-1. **Sign In** – Create an account with your email and a password, confirm your email, then sign in.
+1. **Sign In** – Create an account with your email and a password, confirm your email, then sign in. Forgot it? Tap **Forgot password?** to get a reset link by email.
 2. **Profile Setup** – Enter your company name and superintendent details.
 3. **Projects** – Click **Add Project** to create a project. Use the **pencil** next to the project code to edit or delete it.
 4. **Create a Daily Report** – Select a project and click **Add New Report**. Today's date and local weather fill in automatically (allow location access when prompted); change either if needed.
@@ -151,10 +151,8 @@ npm run preview
 
 ## ⚠️ Known Limitations
 
-- **Photos in the cloud:** Photos are currently stored inside each report's cloud record. They will move to Supabase Storage, which is better suited to images.
+- **Older photos:** Reports synced before photo storage was added keep their images inside the report's cloud record. They move to Storage automatically the next time the report is edited and saved.
 - **Sample data:** New accounts start with sample projects (Alpha, Beta, Gamma). They may briefly appear before a user's own data downloads after sign-in.
-- **Restore Backup:** Restored data is not sent to the cloud automatically.
-- **Password reset:** "Forgot password" is not available yet.
 - **Email sending:** Supabase's built-in email service is limited to a few emails per hour, which is fine for testing.
 - **Voice dictation:** The browser's speech recognition does not know construction terminology (e.g., "FF&E" may be written as "FFNE"). In Chrome and Edge it usually requires an internet connection; it is not supported in Firefox, and support in Safari is limited.
 - **Weather:** Automatic weather requires location permission and an internet connection. Offline, the field stays blank for manual entry.
@@ -167,12 +165,12 @@ npm run preview
 - [x] Add, edit, and delete projects (newest project first)
 - [x] Larger, higher-contrast text for phone readability
 - [x] Compress photos before saving to reduce storage use (with HEIC support)
-- [x] Data export/import backup (temporary, for testing)
+- [x] Data export/import backup (temporary, for testing; removed once cloud sync was added)
 - [x] Accounts and login with Supabase (email & password, Row Level Security)
 - [x] Offline-first cloud sync across devices (automatic, with safe sign-out)
-- [ ] Move photos to Supabase Storage
-- [ ] "Forgot password" flow
-- [ ] Remove the temporary backup buttons
+- [x] Move photos to Supabase Storage (with cleanup of deleted photos)
+- [x] "Forgot password" flow
+- [x] Remove the temporary backup buttons
 - [ ] AI transcription trained on construction terminology, with offline recording that transcribes once back online
 - [x] Hosted deployment on Netlify (accessible from any network)
 - [x] Custom app icons and PWA manifest (installable with its own icon)

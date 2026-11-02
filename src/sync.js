@@ -22,7 +22,8 @@ const reportToCloud = (r, userId) => ({
   weather: r.weather || null,
   bullets: r.bullets || "",
   prep_by: r.prepBy || null,
-  photos: r.photos || [],
+  // Only the photo's ID, caption, and cloud location — not the image itself
+  photos: (r.photos || []).map(({ id, caption, path }) => ({ id, caption, path })),
   updated_at: new Date(r.updatedAt || Date.now()).toISOString(),
 });
 
@@ -32,6 +33,50 @@ async function markClean(table, record) {
     .where("id").equals(record.id)
     .and((x) => x.updatedAt === record.updatedAt)
     .modify({ dirty: 0 });
+}
+
+// Turn a saved photo (stored as text) back into an image file
+async function dataUrlToBlob(dataUrl) {
+  const res = await fetch(dataUrl);
+  return await res.blob();
+}
+
+// Upload this report's photos that aren't in the cloud yet
+async function uploadReportPhotos(report, userId) {
+  let changed = false;
+  const photos = [];
+  for (const photo of report.photos || []) {
+    // Already uploaded (has a cloud path) or nothing to upload
+    if (photo.path || !photo.url) {
+      photos.push(photo);
+      continue;
+    }
+    const path = `${userId}/${report.id}/${photo.id}.jpg`;
+    const blob = await dataUrlToBlob(photo.url);
+    const { error } = await supabase.storage
+      .from("photos")
+      .upload(path, blob, { contentType: "image/jpeg", upsert: true });
+    if (error) throw error;
+    photos.push({ ...photo, path });
+    changed = true;
+  }
+  // Remember on this device where each photo is stored in the cloud
+  if (changed) await db.reports.update(report.id, { photos });
+  return { ...report, photos };
+}
+
+// Delete photo files in a report's cloud folder, except the ones to keep
+async function removeReportFiles(userId, reportId, keepNames = []) {
+  const folder = `${userId}/${reportId}`;
+  const { data: files, error } = await supabase.storage.from("photos").list(folder);
+  if (error) throw error;
+  const toRemove = (files || [])
+    .filter((f) => !keepNames.includes(f.name))
+    .map((f) => `${folder}/${f.name}`);
+  if (toRemove.length > 0) {
+    const { error: removeError } = await supabase.storage.from("photos").remove(toRemove);
+    if (removeError) throw removeError;
+  }
 }
 
 // --- Send all local changes to the cloud ---
@@ -51,8 +96,12 @@ export async function pushChanges(userId) {
 
   // 2. Reports, one at a time (photos can make them large)
   for (const r of dirtyReports) {
-    const { error } = await supabase.from("reports").upsert(reportToCloud(r, userId));
+    const withPaths = await uploadReportPhotos(r, userId);
+    const { error } = await supabase.from("reports").upsert(reportToCloud(withPaths, userId));
     if (error) throw error;
+    // Remove files for photos that were taken out of this report
+    const keep = withPaths.photos.filter((p) => p.path).map((p) => p.path.split("/").pop());
+    await removeReportFiles(userId, r.id, keep);
     await markClean("reports", r);
   }
 
@@ -70,9 +119,18 @@ export async function pushChanges(userId) {
     await db.profile.where("id").equals("me").and((x) => x.updatedAt === profile.updatedAt).modify({ dirty: 0 });
   }
 
-  // 4. Deletions made on this device
+   // 4. Deletions made on this device (and their photo files)
   const deletions = await db.deletions.toArray();
   for (const d of deletions) {
+    if (d.table === "reports") {
+      await removeReportFiles(userId, d.id);
+    } else if (d.table === "projects") {
+      // Find the project's reports in the cloud first, so their photos can be removed
+      const { data: projectReports, error: listError } = await supabase
+        .from("reports").select("id").eq("user_id", userId).eq("project_id", d.id);
+      if (listError) throw listError;
+      for (const pr of projectReports) await removeReportFiles(userId, pr.id);
+    }
     const { error } = await supabase.from(d.table).delete().eq("user_id", userId).eq("id", d.id);
     if (error) throw error;
     await db.deletions.delete(d.key);
@@ -102,6 +160,41 @@ const reportFromCloud = (r) => ({
   dirty: 0,
 });
 
+// Turn a downloaded image file into text the app can store and show offline
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+// Download the photos this device doesn't have yet
+async function downloadReportPhotos(report, localReport) {
+  const localPhotos = new Map((localReport?.photos || []).map((p) => [p.id, p]));
+  const photos = [];
+  for (const photo of report.photos) {
+    // Older reports: the image is still inside the report itself
+    if (photo.url) {
+      photos.push(photo);
+      continue;
+    }
+    // Already on this device: reuse it, no download needed
+    const local = localPhotos.get(photo.id);
+    if (local?.url) {
+      photos.push({ ...photo, url: local.url });
+      continue;
+    }
+    // New photo: download it from Storage
+    if (!photo.path) continue;
+    const { data, error } = await supabase.storage.from("photos").download(photo.path);
+    if (error) throw error;
+    photos.push({ ...photo, url: await blobToDataUrl(data) });
+  }
+  return { ...report, photos };
+}
+
 // --- Receive changes from the cloud (made on other devices) ---
 export async function pullChanges() {
   // 1. Profile
@@ -109,7 +202,7 @@ export async function pullChanges() {
   if (profileError) throw profileError;
   const localProfile = await db.profile.get("me");
   if (cloudProfile && localProfile?.dirty !== 1 &&
-      (localProfile?.updatedAt || 0) < Date.parse(cloudProfile.updated_at)) {
+    (localProfile?.updatedAt || 0) < Date.parse(cloudProfile.updated_at)) {
     await db.profile.put({
       id: "me",
       name: cloudProfile.name,
@@ -143,7 +236,8 @@ export async function pullChanges() {
     if (!local || (local.updatedAt || 0) < Date.parse(cr.updated_at)) {
       const { data, error } = await supabase.from("reports").select("*").eq("id", cr.id).single();
       if (error) throw error;
-      await db.reports.put(reportFromCloud(data));
+      const incoming = await downloadReportPhotos(reportFromCloud(data), local);
+      await db.reports.put(incoming);
     }
   }
 

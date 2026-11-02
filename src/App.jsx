@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { db } from "./db";
-import { supabase } from "./supabase";
-import AuthScreen from "./AuthScreen";
+import { supabase, openedFromResetLink } from "./supabase";
+import AuthScreen, { SetNewPasswordScreen } from "./AuthScreen";
 import { syncAll } from "./sync";
 import {
   Mic,
@@ -21,7 +21,6 @@ import {
   Building2,
   Folder,
   Search,
-  Upload,
   LogOut,
   RefreshCw
 } from "lucide-react";
@@ -142,6 +141,7 @@ export default function App() {
   // --- Login session (who is signed in) ---
   const [session, setSession] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const [isRecovery, setIsRecovery] = useState(openedFromResetLink);
   const [isSyncing, setIsSyncing] = useState(false);
   const syncingRef = React.useRef(false); // true while a sync is running
   const syncRef = React.useRef(null);     // always points to the latest handleSync
@@ -155,8 +155,9 @@ export default function App() {
     });
 
     // Update automatically when someone signs in or out
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession);
+      if (event === "PASSWORD_RECOVERY") setIsRecovery(true);
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -298,86 +299,7 @@ export default function App() {
       showToast("Could not delete project. Please try again.");
     }
   };
-  // --- Backup: download all data as one file ---
-  const handleExportBackup = async () => {
-    try {
-      const backup = {
-        app: "daily-report-tracker",
-        version: 1,
-        exportedAt: new Date().toISOString(),
-        profile: await db.profile.get("me"),
-        projects: await db.projects.toArray(),
-        reports: await db.reports.toArray(),
-      };
 
-      // Turn the data into a downloadable file
-      const blob = new Blob([JSON.stringify(backup)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `daily-reports-backup-${todayISO()}.json`;
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-
-      showToast("Backup downloaded.");
-    } catch (err) {
-      console.error(err);
-      showToast("Could not create backup.");
-    }
-  };
-
-  // --- Backup: restore all data from a backup file ---
-  const handleImportBackup = async (e) => {
-    const input = e.target;
-    const file = input.files[0];
-    input.value = ""; // lets the same file be picked again later
-    if (!file) return;
-
-    try {
-      const backup = JSON.parse(await file.text());
-
-      // Make sure this is a real backup from this app
-      if (
-        backup.app !== "daily-report-tracker" ||
-        !Array.isArray(backup.projects) ||
-        !Array.isArray(backup.reports) ||
-        backup.projects.length === 0
-      ) {
-        showToast("This file is not a valid Daily Report Tracker backup.");
-        return;
-      }
-
-      const message =
-        `Restore backup from ${new Date(backup.exportedAt).toLocaleString()}?\n\n` +
-        `It has ${backup.projects.length} project(s) and ${backup.reports.length} report(s).\n` +
-        `This will REPLACE all projects and reports currently in the app.`;
-      if (!window.confirm(message)) return;
-
-      // Replace everything in one action (all or nothing)
-      await db.transaction("rw", db.profile, db.projects, db.reports, async () => {
-        await db.reports.clear();
-        await db.projects.clear();
-        await db.reports.bulkPut(backup.reports);
-        await db.projects.bulkPut(backup.projects);
-        if (backup.profile) await db.profile.put(backup.profile);
-      });
-
-      // Update the screen with the restored data
-      const sortedProjects = [...backup.projects].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-      setProjects(sortedProjects);
-      setActiveTab(sortedProjects[0].id);
-      setReports(await db.reports.reverse().toArray());
-      if (backup.profile) {
-        const { id, ...rest } = backup.profile;
-        setProfile(rest);
-      }
-      setActiveView("dashboard");
-      showToast("Backup restored successfully!");
-    } catch (err) {
-      console.error(err);
-      showToast("Could not restore backup. The file may be damaged.");
-    }
-  };
   // --- Sign out (sync first, then clear this device) ---
   const countUnsent = async () => {
     const profile = await db.profile.get("me");
@@ -515,6 +437,17 @@ export default function App() {
   if (!session) {
     return <AuthScreen />;
   }
+    if (isRecovery) {
+    return (
+      <SetNewPasswordScreen
+        onDone={() => {
+          setIsRecovery(false);
+          showToast("Password updated. You're signed in.");
+        }}
+      />
+    );
+  }
+
   if (!isLoaded) {
     return (
       <div className="min-h-screen flex items-center justify-center text-slate-500">
@@ -587,23 +520,7 @@ export default function App() {
                 <Pencil className="w-4 h-4 text-slate-600" />
                 Edit Profile
               </button>
-              <button
-                onClick={handleExportBackup}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl text-sm transition flex items-center gap-2 border border-slate-300"
-              >
-                <Download className="w-4 h-4 text-slate-600" />
-                Download Backup
-              </button>
-              <label className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl text-sm transition flex items-center gap-2 border border-slate-300 cursor-pointer">
-                <Upload className="w-4 h-4 text-slate-600" />
-                Restore Backup
-                <input
-                  type="file"
-                  accept=".json,application/json"
-                  onChange={handleImportBackup}
-                  className="hidden"
-                />
-              </label>
+  
               <button
                 onClick={() => handleSync()}
                 disabled={isSyncing}

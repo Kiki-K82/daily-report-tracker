@@ -7,5 +7,8 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 if (!supabaseUrl || !supabaseKey) {
   console.error("Supabase settings are missing. Check your .env.local file.");
 }
+// Remember if the app was opened from a password-reset link
+// (checked before Supabase reads the link and removes it from the address bar)
+export const openedFromResetLink = window.location.hash.includes("type=recovery");
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
