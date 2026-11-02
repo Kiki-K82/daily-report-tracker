@@ -11,3 +11,10 @@ db.version(2).stores({
   profile: "id",
   projects: "id",
 });
+db.version(3).stores({
+  reports: "id, projectId, date, dirty",
+  profile: "id",
+  projects: "id, dirty",
+  deletions: "++key, table, id",
+  meta: "key",
+});

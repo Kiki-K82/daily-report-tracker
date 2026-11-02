@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { db } from "./db";
 import { supabase } from "./supabase";
 import AuthScreen from "./AuthScreen";
+import { syncAll } from "./sync";
 import {
   Mic,
   Plus,
@@ -21,7 +22,8 @@ import {
   Folder,
   Search,
   Upload,
-  LogOut
+  LogOut,
+  RefreshCw
 } from "lucide-react";
 
 const DEFAULT_PROFILE = {
@@ -140,6 +142,10 @@ export default function App() {
   // --- Login session (who is signed in) ---
   const [session, setSession] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const syncingRef = React.useRef(false); // true while a sync is running
+  const syncRef = React.useRef(null);     // always points to the latest handleSync
+  const syncTimerRef = React.useRef(null); // timer for "sync soon after a change"
 
   useEffect(() => {
     // Check if someone is already signed in on this device
@@ -175,9 +181,13 @@ export default function App() {
   const handleDeleteReport = async (id, title) => {
     if (!window.confirm(`Are you sure you want to delete "${title}"?`)) return;
     try {
-      await db.reports.delete(id);
+      await db.transaction("rw", db.reports, db.deletions, async () => {
+        await db.reports.delete(id);
+        await db.deletions.add({ table: "reports", id });
+      });
       setReports((prev) => prev.filter((r) => r.id !== id));
       showToast("Report deleted successfully.");
+      scheduleSync();
       if (selectedReport?.id === id) {
         setSelectedReport(null);
         setActiveView("dashboard");
@@ -190,7 +200,7 @@ export default function App() {
 
   const handleSaveReport = async (reportData) => {
     try {
-      await db.reports.put(reportData);
+      await db.reports.put({ ...reportData, updatedAt: Date.now(), dirty: 1 });
       setReports((prevReports) => {
         const exists = prevReports.some((r) => r.id === reportData.id);
         return exists
@@ -198,6 +208,7 @@ export default function App() {
           : [reportData, ...prevReports];
       });
       showToast(selectedReport ? "Report updated successfully!" : "New report created successfully!");
+      scheduleSync();
       setSelectedReport(reportData);
       setActiveView("view_report");
     } catch (err) {
@@ -209,10 +220,11 @@ export default function App() {
   const handleSaveProfile = async (e) => {
     e.preventDefault();
     try {
-      await db.profile.put({ id: "me", ...tempProfile });
+      await db.profile.put({ id: "me", ...tempProfile, updatedAt: Date.now(), dirty: 1 });
       setProfile({ ...tempProfile });
       setIsEditProfileOpen(false);
       showToast("Profile updated successfully!");
+      scheduleSync();
     } catch (err) {
       console.error(err);
       showToast("Could not save profile.");
@@ -241,13 +253,14 @@ export default function App() {
       ? { ...tempProject, id: `proj-${Date.now()}`, createdAt: Date.now() }
       : { ...tempProject };
     try {
-      await db.projects.put(projectData);
+      await db.projects.put({ ...projectData, updatedAt: Date.now(), dirty: 1 });
       setProjects((prev) =>
         isNew ? [projectData, ...prev] : prev.map((p) => (p.id === projectData.id ? projectData : p))
       );
       setActiveTab(projectData.id);
       setIsProjectModalOpen(false);
       showToast(isNew ? "Project added successfully!" : "Project updated successfully!");
+      scheduleSync();
     } catch (err) {
       console.error(err);
       showToast("Could not save project.");
@@ -267,9 +280,10 @@ export default function App() {
 
     try {
       // Delete the project and its reports together
-      await db.transaction("rw", db.projects, db.reports, async () => {
+      await db.transaction("rw", db.projects, db.reports, db.deletions, async () => {
         await db.reports.where("projectId").equals(tempProject.id).delete();
         await db.projects.delete(tempProject.id);
+        await db.deletions.add({ table: "projects", id: tempProject.id });
       });
 
       const remaining = projects.filter((p) => p.id !== tempProject.id);
@@ -278,6 +292,7 @@ export default function App() {
       setActiveTab(remaining[0].id); // open the newest remaining project
       setIsProjectModalOpen(false);
       showToast("Project deleted.");
+      scheduleSync();
     } catch (err) {
       console.error(err);
       showToast("Could not delete project. Please try again.");
@@ -363,12 +378,123 @@ export default function App() {
       showToast("Could not restore backup. The file may be damaged.");
     }
   };
-  // --- Sign out ---
+  // --- Sign out (sync first, then clear this device) ---
+  const countUnsent = async () => {
+    const profile = await db.profile.get("me");
+    return (
+      (await db.reports.where("dirty").equals(1).count()) +
+      (await db.projects.where("dirty").equals(1).count()) +
+      (await db.deletions.count()) +
+      (profile?.dirty === 1 ? 1 : 0)
+    );
+  };
+
   const handleSignOut = async () => {
     if (!window.confirm("Sign out of Daily Report Tracker?")) return;
+
+    // 1. Try to send any unsent changes first
+    if ((await countUnsent()) > 0 && navigator.onLine) {
+      try {
+        await syncAll(session.user.id);
+      } catch (err) {
+        console.error("Sync before sign-out failed:", err);
+      }
+    }
+
+    // 2. If anything still couldn't be sent, warn before it's lost
+    const stillUnsent = await countUnsent();
+    if (
+      stillUnsent > 0 &&
+      !window.confirm(
+        `${stillUnsent} change(s) haven't reached the cloud yet (no connection).\n\n` +
+        `If you sign out now, they will be LOST. Sign out anyway?`
+      )
+    ) {
+      return;
+    }
+
+    // 3. Clear this device's data so the next person can't see it
+    clearTimeout(syncTimerRef.current);
+    await db.transaction("rw", db.reports, db.projects, db.profile, db.deletions, async () => {
+      await db.reports.clear();
+      await db.projects.clear();
+      await db.profile.clear();
+      await db.deletions.clear();
+    });
+
+    // 4. Sign out and start fresh
     const { error } = await supabase.auth.signOut();
-    if (error) showToast("Could not sign out. Please try again.");
+    if (error) {
+      showToast("Could not sign out. Please try again.");
+      return;
+    }
+    window.location.reload();
   };
+
+  // Reload what's on screen from the local database (after a sync)
+  const reloadFromDb = async () => {
+    const savedProfile = await db.profile.get("me");
+    if (savedProfile) {
+      const { id, dirty, updatedAt, ...rest } = savedProfile;
+      setProfile(rest);
+    }
+    const savedProjects = await db.projects.toArray();
+    savedProjects.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    if (savedProjects.length > 0) {
+      setProjects(savedProjects);
+      // Stay on the current project if it still exists, otherwise open the newest
+      setActiveTab((current) =>
+        savedProjects.some((p) => p.id === current) ? current : savedProjects[0].id
+      );
+    }
+    setReports(await db.reports.reverse().toArray());
+  };
+
+  // --- Cloud sync ---
+  const handleSync = async ({ silent = false } = {}) => {
+    if (syncingRef.current || !session) return; // don't run two syncs at once
+    if (!navigator.onLine) {
+      if (!silent) showToast("No connection. Your changes are saved on this device and will sync later.");
+      return;
+    }
+    syncingRef.current = true;
+    setIsSyncing(true);
+    try {
+      await syncAll(session.user.id);
+      await reloadFromDb();
+      if (!silent) showToast("Synced to cloud.");
+    } catch (err) {
+      console.error("Sync failed:", err);
+      if (!silent) showToast("Sync failed. Your changes are still saved on this device.");
+    } finally {
+      syncingRef.current = false;
+      setIsSyncing(false);
+    }
+  };
+  syncRef.current = handleSync;
+
+  // Sync 3 seconds after a change (waits in case more changes follow quickly)
+  const scheduleSync = () => {
+    clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = setTimeout(() => syncRef.current?.({ silent: true }), 3000);
+  };
+
+  // --- Automatic sync: on open, when back online, and every 5 minutes ---
+  useEffect(() => {
+    if (!session || !isLoaded) return;
+
+    syncRef.current({ silent: true }); // when the app opens or after signing in
+
+    const onOnline = () => syncRef.current({ silent: true }); // when signal comes back
+    window.addEventListener("online", onOnline);
+
+    const timer = setInterval(() => syncRef.current({ silent: true }), 5 * 60 * 1000);
+
+    return () => {
+      window.removeEventListener("online", onOnline);
+      clearInterval(timer);
+    };
+  }, [session?.user?.id, isLoaded]);
 
   const activeProject = projects.find((p) => p.id === activeTab) || projects[0];
   const projectReports = reports
@@ -478,6 +604,14 @@ export default function App() {
                   className="hidden"
                 />
               </label>
+              <button
+                onClick={() => handleSync()}
+                disabled={isSyncing}
+                className="px-4 py-2 bg-teal-700 hover:bg-teal-800 disabled:opacity-60 text-white font-medium rounded-xl text-sm transition flex items-center gap-2"
+              >
+                <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin" : ""}`} />
+                {isSyncing ? "Syncing..." : "Sync Now"}
+              </button>
               <button
                 onClick={handleSignOut}
                 className="px-4 py-2 bg-white hover:bg-red-50 text-red-700 font-medium rounded-xl text-sm transition flex items-center gap-2 border border-red-200"
