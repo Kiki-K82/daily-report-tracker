@@ -216,7 +216,6 @@ export async function pullChanges() {
   // 2. Projects
   const { data: cloudProjects, error: projectsError } = await supabase.from("projects").select("*");
   if (projectsError) throw projectsError;
-  if (cloudProjects.length === 0) return; // brand-new account: nothing in the cloud yet
 
   for (const cp of cloudProjects) {
     const local = await db.projects.get(cp.id);

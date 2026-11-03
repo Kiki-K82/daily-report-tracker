@@ -26,46 +26,12 @@ import {
   RefreshCw
 } from "lucide-react";
 
-const DEFAULT_PROFILE = {
-  name: "Alex Johnson",
-  company: "Apex Construction Inc.",
-  role: "Senior Superintendent",
-};
-const DEFAULT_PROJECTS = [
-  { id: "proj-1", name: "Project Alpha", code: "PA-2026", location: "Downtown Plaza" },
-  { id: "proj-2", name: "Project Beta", code: "PB-2026", location: "Industrial Park" },
-  { id: "proj-3", name: "Project Gamma", code: "PG-2026", location: "Westside District" },
-];
+// New accounts start empty: the super fills in their own profile and projects
+const DEFAULT_PROFILE = { name: "", company: "", role: "" };
 
-const SAMPLE_REPORTS = [
-  {
-    id: "rep-101",
-    projectId: "proj-1",
-    date: "Oct 20, 2026",
-    title: "Foundation Pour & Rebar Inspection",
-    bullets: "• Completed foundation pour for Section 3.\n• Rebar inspection passed by city official.\n• Concrete pump truck arrived on site at 07:30 AM.",
-    weather: "72°F, Clear / Sunny",
-    prepBy: "Alex Johnson"
-  },
-  {
-    id: "rep-102",
-    projectId: "proj-1",
-    date: "Oct 19, 2026",
-    title: "Site Excavation & Underground Utilities",
-    bullets: "• Excavation ongoing at north quadrant.\n• Water main tie-in prepped.\n• Safety toolbox talk conducted prior to shift.",
-    weather: "68°F, Overcast",
-    prepBy: "Alex Johnson"
-  },
-  {
-    id: "rep-103",
-    projectId: "proj-2",
-    date: "Oct 20, 2026",
-    title: "Steel Framing & Crane Setup",
-    bullets: "• Structural steel erection started on grid lines A through D.\n• Mobile 50-ton crane inspected and operational.",
-    weather: "70°F, Sunny",
-    prepBy: "Alex Johnson"
-  }
-];
+// IDs of the old sample data, used once to clean it off devices
+const SAMPLE_PROJECT_IDS = ["proj-1", "proj-2", "proj-3"];
+const SAMPLE_REPORT_IDS = ["rep-101", "rep-102", "rep-103"];
 
 export default function App() {
   const todayFormatted = toDisplay(todayISO());
@@ -78,7 +44,7 @@ export default function App() {
   };
 
   // --- State with LocalStorage Persistence ---
-  const [activeTab, setActiveTab] = useState("proj-1");
+  const [activeTab, setActiveTab] = useState(null);
   const [activeView, setActiveView] = useState("dashboard");
   const [selectedReport, setSelectedReport] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -107,16 +73,21 @@ export default function App() {
         localStorage.removeItem("apex_daily_reports");
         localStorage.removeItem("apex_user_profile");
 
+        // One-time cleanup: remove old sample data that was never edited or synced
+        await db.reports.where("id").anyOf(SAMPLE_REPORT_IDS).and((r) => r.updatedAt === undefined).delete();
+        for (const pid of SAMPLE_PROJECT_IDS) {
+          const p = await db.projects.get(pid);
+          const inUse = await db.reports.where("projectId").equals(pid).count();
+          if (p && p.updatedAt === undefined && inUse === 0) await db.projects.delete(pid);
+        }
         const savedProfile = await db.profile.get("me");
         if (savedProfile) {
           const { id, ...rest } = savedProfile;
           setProfile(rest);
           setReports(await db.reports.reverse().toArray());
         } else {
-          // Very first run: save the defaults and sample reports
+          // Very first run: start with an empty profile
           await db.profile.put({ id: "me", ...DEFAULT_PROFILE });
-          await db.reports.bulkPut(SAMPLE_REPORTS);
-          setReports(SAMPLE_REPORTS);
         }
         // Load projects (first time: save the 3 default projects)
         const savedProjects = await db.projects.toArray();
@@ -125,8 +96,6 @@ export default function App() {
           savedProjects.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
           setProjects(savedProjects);
           setActiveTab(savedProjects[0].id);
-        } else {
-          await db.projects.bulkPut(DEFAULT_PROJECTS);
         }
       } catch (err) {
         console.error("Failed to load data:", err);
@@ -138,7 +107,7 @@ export default function App() {
   }, []);
 
   // Projects State (saved in IndexedDB)
-  const [projects, setProjects] = useState(DEFAULT_PROJECTS);
+  const [projects, setProjects] = useState([]);
   // --- Login session (who is signed in) ---
   const [session, setSession] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -270,11 +239,6 @@ export default function App() {
   };
 
   const handleDeleteProject = async () => {
-    // The dashboard needs at least one project
-    if (projects.length <= 1) {
-      showToast("You need at least one project. Add another before deleting this one.");
-      return;
-    }
 
     const count = reports.filter((r) => r.projectId === tempProject.id).length;
     const message = `Delete "${tempProject.name}" and its ${count} report(s)? This cannot be undone.`;
@@ -291,7 +255,7 @@ export default function App() {
       const remaining = projects.filter((p) => p.id !== tempProject.id);
       setProjects(remaining);
       setReports((prev) => prev.filter((r) => r.projectId !== tempProject.id));
-      setActiveTab(remaining[0].id); // open the newest remaining project
+      setActiveTab(remaining[0]?.id ?? null); // open the newest remaining project, if any
       setIsProjectModalOpen(false);
       showToast("Project deleted.");
       scheduleSync();
@@ -498,23 +462,33 @@ export default function App() {
           <section className="bg-white rounded-2xl p-5 md:p-6 shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between md:items-center gap-4">
             <div className="flex items-start md:items-center space-x-4">
               <div className="w-14 h-14 rounded-2xl bg-teal-800 text-teal-100 flex items-center justify-center font-bold text-xl shadow-inner border border-teal-700">
-                {profile.name.split(' ').map(n => n[0]).join('')}
+                {profile.name ? profile.name.split(' ').map(n => n[0]).join('') : <User className="w-7 h-7" />}
               </div>
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-xl font-bold text-slate-900">{profile.name}</h2>
+                  <h2 className="text-xl font-bold text-slate-900">{profile.name || "Welcome!"}</h2>
                   <span className="text-xs font-semibold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md">Signed In</span>
                 </div>
-                <div className="flex flex-wrap items-center text-sm text-slate-600 gap-x-4 gap-y-1">
-                  <span className="flex items-center gap-1">
-                    <Building2 className="w-4 h-4 text-teal-700" />
-                    <strong>{profile.company}</strong>
-                  </span>
-                  <span className="flex items-center gap-1 text-slate-500">
-                    <User className="w-4 h-4 text-slate-400" />
-                    {profile.role}
-                  </span>
-                </div>
+                {profile.name ? (
+                  <div className="flex flex-wrap items-center text-sm text-slate-600 gap-x-4 gap-y-1">
+                    {profile.company && (
+                      <span className="flex items-center gap-1">
+                        <Building2 className="w-4 h-4 text-teal-700" />
+                        <strong>{profile.company}</strong>
+                      </span>
+                    )}
+                    {profile.role && (
+                      <span className="flex items-center gap-1 text-slate-500">
+                        <User className="w-4 h-4 text-slate-400" />
+                        {profile.role}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-base text-slate-600">
+                    Add your name and company so they appear on your reports.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -524,7 +498,7 @@ export default function App() {
                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl text-sm transition flex items-center gap-2 border border-slate-300"
               >
                 <Pencil className="w-4 h-4 text-slate-600" />
-                Edit Profile
+                {profile.name ? "Edit Profile" : "Set Up Profile"}
               </button>
 
               <button
@@ -545,161 +519,180 @@ export default function App() {
             </div>
           </section>
 
-          {/* Project Tabs Section */}
-          <section className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
-                <Folder className="w-4 h-4 text-teal-700" /> Active Projects
-              </h3>
+          {/* Shown when there are no projects yet */}
+          {projects.length === 0 && (
+            <section className="bg-white rounded-2xl p-8 shadow-sm border border-slate-200 text-center space-y-4">
+              <Folder className="w-12 h-12 text-teal-700 mx-auto" />
+              <h2 className="text-2xl font-bold text-slate-900">Add your first project</h2>
+              <p className="text-base text-slate-600 max-w-md mx-auto">
+                Create a project for the job site you're working on. Then you can start writing daily reports for it.
+              </p>
               <button
                 onClick={handleOpenAddProject}
-                className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-teal-800 bg-white border border-slate-300 rounded-xl hover:bg-teal-50 transition"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-teal-700 hover:bg-teal-800 text-white font-bold text-base rounded-xl transition shadow-md"
               >
-                <Plus className="w-4 h-4" /> Add Project
+                <Plus className="w-5 h-5" /> Add Project
               </button>
-            </div>
+            </section>
+          )}
 
-            <div className="flex space-x-2 border-b border-slate-300 overflow-x-auto pb-1 scrollbar-none">
-              {projects.map((proj) => {
-                const isActive = activeTab === proj.id;
-                const count = reports.filter(r => r.projectId === proj.id).length;
-                return (
-                  <button
-                    key={proj.id}
-                    onClick={() => setActiveTab(proj.id)}
-                    className={`px-5 py-3 rounded-t-xl font-semibold text-sm transition flex items-center gap-2.5 whitespace-nowrap border-t border-x ${isActive
-                      ? "bg-white text-teal-900 border-slate-300 border-b-white font-bold shadow-sm -mb-[1px]"
-                      : "bg-slate-200/80 text-slate-600 hover:bg-slate-300/80 border-transparent"
-                      }`}
-                  >
-                    <span>{proj.name}</span>
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${isActive ? "bg-teal-100 text-teal-800" : "bg-slate-300 text-slate-700"}`}>
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Active Project Dashboard Header & Report List */}
-            <div className="bg-white rounded-b-2xl rounded-tr-2xl p-5 md:p-6 shadow-sm border border-slate-200 space-y-6">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-slate-100">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-2xl font-bold text-slate-900">{activeProject.name}</h2>
-                    <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md font-mono border border-slate-200">{activeProject.code}</span>
-                    <button
-                      onClick={handleOpenEditProject}
-                      title="Edit Project"
-                      className="p-2 text-slate-600 hover:text-teal-800 hover:bg-teal-100 rounded-lg transition"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-                    <span>Location: {activeProject.location}</span>
-                    <span>•</span>
-                    <span>Total Logs: {projectReports.length}</span>
-                  </p>
-                </div>
-
+          {/* Project Tabs Section */}
+          {projects.length > 0 && (
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                  <Folder className="w-4 h-4 text-teal-700" /> Active Projects
+                </h3>
                 <button
-                  onClick={() => handleOpenReportForm()}
-                  className="w-full sm:w-auto px-5 py-3 bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white font-bold text-sm rounded-xl transition shadow-md hover:shadow-lg flex items-center justify-center gap-2 group"
+                  onClick={handleOpenAddProject}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-teal-800 bg-white border border-slate-300 rounded-xl hover:bg-teal-50 transition"
                 >
-                  <Plus className="w-5 h-5 transition-transform group-hover:rotate-90" />
-                  Add New Report
+                  <Plus className="w-4 h-4" /> Add Project
                 </button>
               </div>
 
-              {/* Search & Filter Bar */}
-              <div className="flex flex-col sm:flex-row items-center gap-3">
-                <div className="relative w-full">
-                  <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search reports by date or keyword..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white"
-                  />
-                  {searchQuery && (
-                    <button onClick={() => setSearchQuery('')} className="absolute right-3 top-3 text-slate-400 hover:text-slate-600">
-                      <X className="w-4 h-4" />
+              <div className="flex space-x-2 border-b border-slate-300 overflow-x-auto pb-1 scrollbar-none">
+                {projects.map((proj) => {
+                  const isActive = activeTab === proj.id;
+                  const count = reports.filter(r => r.projectId === proj.id).length;
+                  return (
+                    <button
+                      key={proj.id}
+                      onClick={() => setActiveTab(proj.id)}
+                      className={`px-5 py-3 rounded-t-xl font-semibold text-sm transition flex items-center gap-2.5 whitespace-nowrap border-t border-x ${isActive
+                        ? "bg-white text-teal-900 border-slate-300 border-b-white font-bold shadow-sm -mb-[1px]"
+                        : "bg-slate-200/80 text-slate-600 hover:bg-slate-300/80 border-transparent"
+                        }`}
+                    >
+                      <span>{proj.name}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs ${isActive ? "bg-teal-100 text-teal-800" : "bg-slate-300 text-slate-700"}`}>
+                        {count}
+                      </span>
                     </button>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 text-xs text-slate-500 whitespace-nowrap self-end sm:self-center">
-                  <Filter className="w-3.5 h-3.5" />
-                  <span>Showing {projectReports.length} entries</span>
-                </div>
+                  );
+                })}
               </div>
 
-              {/* Reports List */}
-              {projectReports.length > 0 ? (
-                <div className="space-y-3">
-                  {projectReports.map((report) => (
-                    <div
-                      key={report.id}
-                      className="group bg-slate-50 hover:bg-slate-100/90 border border-slate-200 hover:border-teal-300 rounded-xl p-4 transition duration-150 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-2xs"
-                    >
+              {/* Active Project Dashboard Header & Report List */}
+              <div className="bg-white rounded-b-2xl rounded-tr-2xl p-5 md:p-6 shadow-sm border border-slate-200 space-y-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-slate-100">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-2xl font-bold text-slate-900">{activeProject.name}</h2>
+                      <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md font-mono border border-slate-200">{activeProject.code}</span>
                       <button
-                        onClick={() => handleOpenViewReport(report)}
-                        className="text-left flex-1 space-y-1.5 focus:outline-none"
+                        onClick={handleOpenEditProject}
+                        title="Edit Project"
+                        className="p-2 text-slate-600 hover:text-teal-800 hover:bg-teal-100 rounded-lg transition"
                       >
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <span className="px-3 py-1 bg-teal-900 text-white font-semibold text-xs rounded-lg shadow-2xs">
-                            {report.date}
-                          </span>
-                          <h4 className="font-bold text-slate-800 text-base group-hover:text-teal-900 transition flex items-center gap-1.5">
-                            {report.title}
-                            <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 text-teal-700 transition" />
-                          </h4>
-                        </div>
-                        <p className="text-base md:text-sm text-slate-600 line-clamp-1 pr-4 whitespace-pre-line">
-                          {report.bullets}
-                        </p>
-                        <div className="flex flex-wrap items-center gap-3 text-sm md:text-xs text-slate-600 font-medium">
-                          <span>Weather: {report.weather}</span>
-                          <span>•</span>
-                          <span>By: {report.prepBy}</span>
-                        </div>
+                        <Pencil className="w-4 h-4" />
                       </button>
-
-                      <div className="flex items-center gap-2 border-t md:border-t-0 pt-3 md:pt-0 border-slate-200 justify-end">
-                        <button
-                          onClick={() => handleOpenReportForm(report)}
-                          title="Edit Report"
-                          className="p-2 text-slate-600 hover:text-teal-800 hover:bg-teal-100 rounded-lg transition"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteReport(report.id, report.title)}
-                          title="Delete Report"
-                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12 bg-slate-50 rounded-xl border border-dashed border-slate-300 space-y-3">
-                  <AlertCircle className="w-10 h-10 text-slate-400 mx-auto" />
-                  <p className="text-slate-600 font-medium">No reports found for this project.</p>
-                  <p className="text-xs text-slate-400">Click below to record your first daily report.</p>
+                    <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                      <span>Location: {activeProject.location}</span>
+                      <span>•</span>
+                      <span>Total Logs: {projectReports.length}</span>
+                    </p>
+                  </div>
+
                   <button
                     onClick={() => handleOpenReportForm()}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-teal-700 text-white rounded-lg text-sm font-semibold hover:bg-teal-800 transition"
+                    className="w-full sm:w-auto px-5 py-3 bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white font-bold text-sm rounded-xl transition shadow-md hover:shadow-lg flex items-center justify-center gap-2 group"
                   >
-                    <Plus className="w-4 h-4" /> Create Daily Report
+                    <Plus className="w-5 h-5 transition-transform group-hover:rotate-90" />
+                    Add New Report
                   </button>
                 </div>
-              )}
-            </div>
-          </section>
+
+                {/* Search & Filter Bar */}
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                  <div className="relative w-full">
+                    <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search reports by date or keyword..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white"
+                    />
+                    {searchQuery && (
+                      <button onClick={() => setSearchQuery('')} className="absolute right-3 top-3 text-slate-400 hover:text-slate-600">
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-slate-500 whitespace-nowrap self-end sm:self-center">
+                    <Filter className="w-3.5 h-3.5" />
+                    <span>Showing {projectReports.length} entries</span>
+                  </div>
+                </div>
+
+                {/* Reports List */}
+                {projectReports.length > 0 ? (
+                  <div className="space-y-3">
+                    {projectReports.map((report) => (
+                      <div
+                        key={report.id}
+                        className="group bg-slate-50 hover:bg-slate-100/90 border border-slate-200 hover:border-teal-300 rounded-xl p-4 transition duration-150 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-2xs"
+                      >
+                        <button
+                          onClick={() => handleOpenViewReport(report)}
+                          className="text-left flex-1 space-y-1.5 focus:outline-none"
+                        >
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span className="px-3 py-1 bg-teal-900 text-white font-semibold text-xs rounded-lg shadow-2xs">
+                              {report.date}
+                            </span>
+                            <h4 className="font-bold text-slate-800 text-base group-hover:text-teal-900 transition flex items-center gap-1.5">
+                              {report.title}
+                              <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 text-teal-700 transition" />
+                            </h4>
+                          </div>
+                          <p className="text-base md:text-sm text-slate-600 line-clamp-1 pr-4 whitespace-pre-line">
+                            {report.bullets}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-3 text-sm md:text-xs text-slate-600 font-medium">
+                            <span>Weather: {report.weather}</span>
+                            <span>•</span>
+                            <span>By: {report.prepBy}</span>
+                          </div>
+                        </button>
+
+                        <div className="flex items-center gap-2 border-t md:border-t-0 pt-3 md:pt-0 border-slate-200 justify-end">
+                          <button
+                            onClick={() => handleOpenReportForm(report)}
+                            title="Edit Report"
+                            className="p-2 text-slate-600 hover:text-teal-800 hover:bg-teal-100 rounded-lg transition"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteReport(report.id, report.title)}
+                            title="Delete Report"
+                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 bg-slate-50 rounded-xl border border-dashed border-slate-300 space-y-3">
+                    <AlertCircle className="w-10 h-10 text-slate-400 mx-auto" />
+                    <p className="text-slate-600 font-medium">No reports found for this project.</p>
+                    <p className="text-xs text-slate-400">Click below to record your first daily report.</p>
+                    <button
+                      onClick={() => handleOpenReportForm()}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-teal-700 text-white rounded-lg text-sm font-semibold hover:bg-teal-800 transition"
+                    >
+                      <Plus className="w-4 h-4" /> Create Daily Report
+                    </button>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
         </main>
       ) : activeView === "report_form" ? (
         /* Report Form View Component */
