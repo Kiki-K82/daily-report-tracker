@@ -3,6 +3,7 @@ import { db } from "./db";
 import { supabase, openedFromResetLink } from "./supabase";
 import AuthScreen, { SetNewPasswordScreen } from "./AuthScreen";
 import { syncAll } from "./sync";
+import { processQueuedNotes, setOpenReport } from "./voiceQueue";
 import {
   Mic,
   Plus,
@@ -369,7 +370,10 @@ export default function App() {
         savedProjects.some((p) => p.id === current) ? current : savedProjects[0].id
       );
     }
-    setReports(await db.reports.reverse().toArray());
+    const freshReports = await db.reports.reverse().toArray();
+    setReports(freshReports);
+    // If a report is open on screen, show its latest version (e.g. newly added voice notes)
+    setSelectedReport((prev) => (prev ? freshReports.find((r) => r.id === prev.id) || prev : prev));
   };
 
   // --- Cloud sync ---
@@ -382,7 +386,9 @@ export default function App() {
     syncingRef.current = true;
     setIsSyncing(true);
     try {
+      const notesAdded = await processQueuedNotes();
       await syncAll(session.user.id);
+      if (notesAdded > 0) showToast(`${notesAdded} voice note${notesAdded > 1 ? "s" : ""} transcribed and added.`);
       await reloadFromDb();
       if (!silent) showToast("Synced to cloud.");
     } catch (err) {
@@ -437,7 +443,7 @@ export default function App() {
   if (!session) {
     return <AuthScreen />;
   }
-    if (isRecovery) {
+  if (isRecovery) {
     return (
       <SetNewPasswordScreen
         onDone={() => {
@@ -520,7 +526,7 @@ export default function App() {
                 <Pencil className="w-4 h-4 text-slate-600" />
                 Edit Profile
               </button>
-  
+
               <button
                 onClick={() => handleSync()}
                 disabled={isSyncing}
@@ -932,6 +938,13 @@ export default function App() {
 
 // --- SUB-COMPONENT FOR CREATING & EDITING REPORTS WITH PHOTOS & VOICE ---
 function ReportFormView({ selectedReport, activeProject, profile, showToast, onSave, onCancel }) {
+  // The report's ID is set when the form opens, so offline voice notes can be linked to it
+  const [reportId] = useState(() => selectedReport?.id || `rep-${Date.now()}`);
+  // While this form is open, its waiting voice notes are held until the report is saved
+  useEffect(() => {
+    setOpenReport(reportId);
+    return () => setOpenReport(null);
+  }, [reportId]);
   const [title, setTitle] = useState(selectedReport?.title || "Daily Site Log");
   const [date, setDate] = useState(selectedReport ? toISO(selectedReport.date) : todayISO());
   const [weather, setWeather] = useState(selectedReport?.weather || "");
@@ -967,7 +980,23 @@ function ReportFormView({ selectedReport, activeProject, profile, showToast, onS
 
   // Voice Recording State
   const [isRecording, setIsRecording] = useState(false);
-  const [recognitionInstance, setRecognitionInstance] = useState(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const mediaRecorderRef = React.useRef(null); // the active recorder
+  const chunksRef = React.useRef([]);          // pieces of audio while recording
+  // Voice notes saved on this device, waiting for signal
+  const [pendingNotes, setPendingNotes] = useState(0);
+  const refreshPendingNotes = async () => {
+    setPendingNotes(await db.voiceNotes.where("reportId").equals(reportId).count());
+  };
+  useEffect(() => {
+    refreshPendingNotes();
+  }, []);
+
+  const queueVoiceNote = async (blob) => {
+    await db.voiceNotes.add({ reportId, createdAt: Date.now(), blob });
+    await refreshPendingNotes();
+    showToast("No signal. Voice note saved, and it will be transcribed when you're back online.");
+  };
 
   // Handle Image Upload: shrink each photo before saving
   const handleImageUpload = async (e) => {
@@ -1003,58 +1032,86 @@ function ReportFormView({ selectedReport, activeProject, profile, showToast, onS
     setPhotos((prev) => prev.filter((p) => p.id !== id));
   };
 
-  // Toggle Speech Recognition
-  const handleToggleRecording = () => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-      showToast("Speech recognition is not supported in this browser. Please use Google Chrome.");
+  // Send a recording to the "transcribe" function and add the text as a bullet
+  const transcribeAudio = async (blob) => {
+    // No signal: keep the recording on the phone for later
+    if (!navigator.onLine) {
+      await queueVoiceNote(blob);
       return;
     }
-
-    if (isRecording) {
-      if (recognitionInstance) recognitionInstance.stop();
-      setIsRecording(false);
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = "en-US";
-
-    recognition.onstart = () => setIsRecording(true);
-
-    recognition.onresult = (event) => {
-      let finalTranscript = "";
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript + "\n";
-        }
-      }
-
-      const cleanText = finalTranscript.trim();
-      if (cleanText) {
-        setBullets((prev) => (prev ? `${prev}\n• ${cleanText}` : `• ${cleanText}`));
-      }
-    };
-
-    recognition.onerror = () => setIsRecording(false);
-    recognition.onend = () => setIsRecording(false);
-
+    setIsTranscribing(true);
     try {
-      recognition.start();
-      setRecognitionInstance(recognition);
+      const ext = blob.type.includes("mp4") ? "mp4" : blob.type.includes("ogg") ? "ogg" : "webm";
+      const form = new FormData();
+      form.append("audio", blob, `note.${ext}`);
+      const { data, error } = await supabase.functions.invoke("transcribe", { body: form });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      const text = (data?.text || "").trim();
+      if (text) {
+        setBullets((prev) => (prev ? `${prev}\n• ${text}` : `• ${text}`));
+      } else {
+        showToast("No speech was detected. Please try again.");
+      }
     } catch (err) {
-      setIsRecording(false);
+      console.error("Transcription failed:", err);
+      if (err.name === "FunctionsFetchError") {
+        // Signal dropped or too weak to reach the server: save it for later instead of losing it
+        await queueVoiceNote(blob);
+      } else {
+        showToast("Transcription failed. Please try again.");
+      }
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
+  // Start or stop recording
+  const handleToggleRecording = async () => {
+    if (isRecording) {
+      mediaRecorderRef.current?.stop(); // finishing the recording triggers onstop below
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      showToast("Recording isn't supported in this browser.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      chunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop()); // turn the microphone off
+        setIsRecording(false);
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        transcribeAudio(blob);
+      };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setIsRecording(true);
+    } catch (err) {
+      console.error(err);
+      showToast("Microphone access was blocked. Allow the microphone and try again.");
+    }
+  };
+
+  // Stop recording without transcribing (when leaving the form)
+  const cancelRecording = () => {
+    const rec = mediaRecorderRef.current;
+    if (rec && rec.state !== "inactive") {
+      rec.onstop = () => rec.stream.getTracks().forEach((t) => t.stop());
+      rec.stop();
     }
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (isRecording && recognitionInstance) recognitionInstance.stop();
+    cancelRecording();
     onSave({
-      id: selectedReport?.id || `rep-${Date.now()}`,
+      id: reportId,
       projectId: selectedReport?.projectId || activeProject.id,
       title,
       date: toDisplay(date),
@@ -1071,7 +1128,7 @@ function ReportFormView({ selectedReport, activeProject, profile, showToast, onS
         <button
           type="button"
           onClick={() => {
-            if (isRecording && recognitionInstance) recognitionInstance.stop();
+            cancelRecording();
             onCancel();
           }}
           className="flex items-center gap-2 text-sm font-bold text-teal-800 hover:text-teal-900 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-2xs"
@@ -1138,10 +1195,13 @@ function ReportFormView({ selectedReport, activeProject, profile, showToast, onS
             <button
               type="button"
               onClick={handleToggleRecording}
+              disabled={isTranscribing}
               className={`w-24 h-24 rounded-full active:scale-95 transition-all text-white font-bold shadow-lg inline-flex flex-col items-center justify-center gap-1 border-4 ${isRecording ? "bg-red-600 hover:bg-red-500 border-red-300 animate-bounce shadow-red-900/80" : "bg-teal-600 hover:bg-teal-500 border-teal-400/30 shadow-teal-900/50"}`}
             >
               <Mic className="w-8 h-8" />
-              <span className="text-[10px] tracking-wider uppercase">{isRecording ? "Listening" : "Record"}</span>
+              <span className="text-[10px] tracking-wider uppercase">
+                {isRecording ? "Stop" : isTranscribing ? "Working..." : "Record"}
+              </span>
             </button>
           </div>
         </div>
@@ -1149,6 +1209,11 @@ function ReportFormView({ selectedReport, activeProject, profile, showToast, onS
         {/* AI Generated Bulletin Report Area */}
         <div className="space-y-2">
           <label className="block text-sm font-bold text-slate-800">AI Bulletin Report Summary</label>
+          {pendingNotes > 0 && (
+            <div className="text-base rounded-xl p-3 border bg-amber-50 border-amber-200 text-amber-900">
+              {pendingNotes} voice note{pendingNotes > 1 ? "s" : ""} waiting for signal. Save the report as usual, and the text will be added automatically once you're back online.
+            </div>
+          )}
           <textarea
             rows={6}
             value={bullets}
@@ -1211,7 +1276,7 @@ function ReportFormView({ selectedReport, activeProject, profile, showToast, onS
 
         {/* Actions */}
         <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-          <button type="button" onClick={onCancel} className="px-5 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-200 transition">
+          <button type="button" onClick={() => { cancelRecording(); onCancel(); }} className="px-5 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-200 transition">
             Cancel
           </button>
           <button type="submit" className="px-6 py-2.5 bg-teal-700 text-white rounded-xl text-sm font-bold hover:bg-teal-800 transition shadow-md">

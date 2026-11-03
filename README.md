@@ -14,7 +14,8 @@ A field-ready, offline-first Progressive Web App (PWA) for construction superint
 - **🖼️ Cloud Photo Storage** – Photos are uploaded once to a private Supabase Storage bucket (one folder per user, protected by a security policy) and downloaded only on devices that don't have them yet. Reports in the cloud store just each photo's ID, caption, and location. Removing a photo, deleting a report, or deleting a project also deletes the photo files from Storage.
 - **🗂️ Project Management** – Add, edit, and delete projects (name, code, location). The newest project appears as the first tab and opens by default. Deleting a project also deletes its reports, after a confirmation warning.
 - **📅 Smart Report Defaults** – New reports open with today's date (with a calendar picker to change it) and the current local weather, fetched automatically from your location. Both can be edited manually.
-- **🎙️ Hands-Free Voice Dictation** – Uses the Web Speech API to transcribe spoken notes directly into the daily log while walking the site. Each spoken phrase becomes a bullet point.
+- **🎙️ AI Voice Dictation** – Tap **Record**, speak, and tap **Stop**. The recording is transcribed by OpenAI (`gpt-4o-mini-transcribe`) through a Supabase Edge Function, with a built-in list of construction terms (FF&E, RFI, MEP, punch list, and more) to improve spelling of site language. The text is added as a bullet point. Works on iPhone (Safari) as well as Chrome and Edge. The OpenAI key stays on the server and is never exposed to the app, and only signed-in users can use the function.
+- **📡 Offline Voice Notes** – With no signal (or too weak a signal to reach the server), recordings are saved on the device and the form shows how many are waiting. Once the phone is back online, waiting notes are transcribed automatically, added to their report in the order they were recorded, and synced to the cloud.
 - **📸 Photo Documentation & Labeling** – Add photos from the camera or device storage, store them offline, and attach trade or location captions. Photos are automatically resized (max 1600px) and compressed to JPEG before saving, typically about 15–20× smaller (e.g., 2.7 MB → 159 KB). iPhone HEIC photos are converted automatically, so they also work in Windows browsers. In the report, photos are shown in full without cropping.
 - **📄 PDF Export** – Uses the browser's built-in print engine with custom print CSS to produce formatted daily report PDFs, with no external server required. After saving, the report opens straight to the preview, ready to export.
 - **👓 Readable on Phones** – Larger, darker text on phones for report previews, field notes, and form fields, tested with users of different ages. Form text is 16px, which also stops iPhones from auto-zooming when a field is tapped.
@@ -33,7 +34,7 @@ A field-ready, offline-first Progressive Web App (PWA) for construction superint
 | PWA / Offline | vite-plugin-pwa (service worker) |
 | Weather | Open-Meteo API (free, no API key) + browser Geolocation |
 | Photo Processing | Browser Canvas API (resize & compress) + heic2any (HEIC → JPEG) |
-| Speech-to-Text | Web Speech API (`SpeechRecognition`) |
+| Speech-to-Text | Browser `MediaRecorder` + OpenAI transcription API via Supabase Edge Function (`transcribe`) |
 | PDF Export | Browser print engine (`window.print()` + `@media print`) |
 
 ## 📁 Project Structure
@@ -54,6 +55,7 @@ daily-report-tracker/
 │   ├── db.js              # IndexedDB database setup (Dexie.js)
 │   ├── supabase.js        # Supabase connection
 │   ├── sync.js            # Offline-first cloud sync (send & receive)
+│   ├── voiceQueue.js      # Offline voice notes: transcribe when back online
 │   ├── main.jsx           # Application entry point
 │   └── index.css          # Tailwind directives & @media print styles
 ├── .env.local             # Supabase settings (not committed to Git)
@@ -89,6 +91,14 @@ VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_your_key_here
 - Use the base URL only (no `/rest/v1/` at the end).
 - Never use the **secret** key in this app.
 - `.env.local` is excluded from Git. For the live site, add the same two variables in **Netlify → Project configuration → Environment variables** (not marked as secret).
+
+### Voice Dictation (Supabase Edge Function)
+
+The `transcribe` Edge Function is created in the Supabase dashboard (**Edge Functions → Deploy a new function → Via Editor**). Name it `transcribe` *before* the first save, since the first name becomes its web address. Keep **Verify JWT** on so only signed-in users can call it.
+
+Store the OpenAI API key under **Edge Functions → Secrets** as `OPENAI_API_KEY`. Never put this key in the app, `.env.local`, or Netlify. Use a low spending limit and keep auto-recharge off while testing.
+
+To improve recognition of site terms, edit the `CONSTRUCTION_TERMS` list in the function and redeploy.
 
 Then start the app:
 
@@ -141,7 +151,7 @@ npm run preview
 2. **Profile Setup** – Enter your company name and superintendent details.
 3. **Projects** – Click **Add Project** to create a project. Use the **pencil** next to the project code to edit or delete it.
 4. **Create a Daily Report** – Select a project and click **Add New Report**. Today's date and local weather fill in automatically (allow location access when prompted); change either if needed.
-5. **Voice Dictation** – Tap **Record** and speak your field observations. Each phrase is added as a bullet point.
+5. **Voice Dictation** – Tap **Record**, speak your field observations, then tap **Stop**. The text is added as a bullet point. No signal? The note is saved and added automatically once you're back online. Just save the report as usual.
 6. **Photos** – Click **+ Add Site Photo**, then add a caption (e.g., "Foundation Pour – Grid C4").
 7. **Save & Export** – Click **Save Report**. The finished report opens immediately; click **Export PDF Report** to save or print it.
 8. **Sync** – Happens automatically. Use **Sync Now** to sync immediately. Sign in on another device to see the same reports.
@@ -154,7 +164,8 @@ npm run preview
 - **Older photos:** Reports synced before photo storage was added keep their images inside the report's cloud record. They move to Storage automatically the next time the report is edited and saved.
 - **Sample data:** New accounts start with sample projects (Alpha, Beta, Gamma). They may briefly appear before a user's own data downloads after sign-in.
 - **Email sending:** Supabase's built-in email service is limited to a few emails per hour, which is fine for testing.
-- **Voice dictation:** The browser's speech recognition does not know construction terminology (e.g., "FF&E" may be written as "FFNE"). In Chrome and Edge it usually requires an internet connection; it is not supported in Firefox, and support in Safari is limited.
+- **Voice dictation:** Accuracy depends on how clearly terms are spoken (e.g., "FF&E" said quickly may come out as "epiphany"). Each recording currently becomes one bullet; an AI cleanup step to split and tidy notes is planned. Background conversations on a noisy site may be picked up. Holding the phone close or using earbuds with a mic helps.
+- **Offline voice notes:** Notes recorded in a report that is never saved (form cancelled) are discarded after 7 days.
 - **Weather:** Automatic weather requires location permission and an internet connection. Offline, the field stays blank for manual entry.
 
 ## 🗺️ Roadmap
@@ -171,6 +182,8 @@ npm run preview
 - [x] Move photos to Supabase Storage (with cleanup of deleted photos)
 - [x] "Forgot password" flow
 - [x] Remove the temporary backup buttons
-- [ ] AI transcription trained on construction terminology, with offline recording that transcribes once back online
+- [x] AI transcription with construction terminology (OpenAI via Supabase Edge Function)
+- [x] Offline recording that transcribes automatically once back online
+- [ ] AI cleanup of dictated notes (split into clean bullets, fix terms, drop off-topic chatter)
 - [x] Hosted deployment on Netlify (accessible from any network)
 - [x] Custom app icons and PWA manifest (installable with its own icon)

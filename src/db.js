@@ -18,3 +18,11 @@ db.version(3).stores({
   deletions: "++key, table, id",
   meta: "key",
 });
+db.version(4).stores({
+  reports: "id, projectId, date, dirty",
+  profile: "id",
+  projects: "id, dirty",
+  deletions: "++key, table, id",
+  meta: "key",
+  voiceNotes: "++key, reportId, createdAt",
+});
