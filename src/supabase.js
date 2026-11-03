@@ -9,6 +9,8 @@ if (!supabaseUrl || !supabaseKey) {
 }
 // Remember if the app was opened from a password-reset link
 // (checked before Supabase reads the link and removes it from the address bar)
-export const openedFromResetLink = window.location.hash.includes("type=recovery");
+export const openedFromResetLink =
+  window.location.hash.includes("type=recovery") || // forgot-password link
+  window.location.hash.includes("type=invite");     // invite link for a new tester
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
