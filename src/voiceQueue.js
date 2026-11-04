@@ -42,8 +42,8 @@ export async function processQueuedNotes() {
 
     const newBullets = await transcribeBlob(note.blob);
     if (newBullets.length > 0) {
-      const added = newBullets.map((b) => `• ${b}`).join("\n");
-      const bullets = report.bullets ? `${report.bullets}\n${added}` : added;
+      const addedText = newBullets.map((b) => `• ${b}`).join("\n");
+      const bullets = report.bullets ? `${report.bullets}\n${addedText}` : addedText;
       await db.reports.update(note.reportId, { bullets, updatedAt: Date.now(), dirty: 1 });
       added++;
     }
