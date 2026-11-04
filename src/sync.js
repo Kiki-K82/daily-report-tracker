@@ -9,6 +9,8 @@ const projectToCloud = (p, userId) => ({
   name: p.name,
   code: p.code || null,
   location: p.location || null,
+  start_date: p.startDate || null,
+  end_date: p.endDate || null,
   created_at: new Date(p.createdAt || 0).toISOString(),
   updated_at: new Date(p.updatedAt || Date.now()).toISOString(),
 });
@@ -119,7 +121,7 @@ export async function pushChanges(userId) {
     await db.profile.where("id").equals("me").and((x) => x.updatedAt === profile.updatedAt).modify({ dirty: 0 });
   }
 
-   // 4. Deletions made on this device (and their photo files)
+  // 4. Deletions made on this device (and their photo files)
   const deletions = await db.deletions.toArray();
   for (const d of deletions) {
     if (d.table === "reports") {
@@ -142,6 +144,8 @@ const projectFromCloud = (p) => ({
   name: p.name,
   code: p.code || "",
   location: p.location || "",
+  startDate: p.start_date || "",
+  endDate: p.end_date || "",
   createdAt: Date.parse(p.created_at),
   updatedAt: Date.parse(p.updated_at),
   dirty: 0,

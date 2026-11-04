@@ -40,6 +40,34 @@ export default function App() {
 
   const handleExportPDF = () => {
     showToast("Opening print dialog... Select 'Save as PDF'");
+
+    // Add a repeating header (pages 2+) and page numbers (every page) to the printout
+    const clean = (s) => String(s || "").replace(/["\\]/g, ""); // remove characters that would break the CSS
+    const projectName = clean(activeProject?.name).toUpperCase();
+    const reportDate = clean(selectedReport?.date || todayFormatted);
+
+    const style = document.createElement("style");
+    style.textContent = `
+      @page {
+        margin: 16mm 14mm;
+        @top-left { content: "DAILY REPORT · ${projectName}"; font-size: 9pt; font-weight: 700; color: #134e4a; }
+        @top-right { content: "${reportDate}"; font-size: 9pt; font-weight: 700; color: #0f172a; }
+        @bottom-center { content: "Page " counter(page) " of " counter(pages); font-size: 9pt; color: #64748b; }
+      }
+      @page :first {
+        @top-left { content: none; }
+        @top-right { content: none; }
+      }
+    `;
+    document.head.appendChild(style);
+
+    // Remove these print settings again once printing is done
+    const cleanup = () => {
+      style.remove();
+      window.removeEventListener("afterprint", cleanup);
+    };
+    window.addEventListener("afterprint", cleanup);
+
     window.print();
   };
 
@@ -56,7 +84,7 @@ export default function App() {
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [tempProfile, setTempProfile] = useState({ ...profile });
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
-  const [tempProject, setTempProject] = useState({ id: null, name: "", code: "", location: "" });
+  const [tempProject, setTempProject] = useState({ id: null, name: "", code: "", location: "", startDate: "", endDate: "" });
 
   // Load data from IndexedDB once when the app opens
   useEffect(() => {
@@ -208,7 +236,7 @@ export default function App() {
   };
   // --- Project handlers ---
   const handleOpenAddProject = () => {
-    setTempProject({ id: null, name: "", code: "", location: "" });
+    setTempProject({ id: null, name: "", code: "", location: "", startDate: "", endDate: "" });
     setIsProjectModalOpen(true);
   };
 
@@ -734,12 +762,11 @@ export default function App() {
           <div ref={reportRef} className="print-container bg-white rounded-2xl p-8 shadow-md border border-slate-200 space-y-6">
             <div className="border-b-2 border-teal-900 pb-4 flex justify-between items-start">
               <div>
-                <h2 className="text-2xl font-black text-slate-900 tracking-tight">DAILY CONSTRUCTION REPORT</h2>
+                <h2 className="text-2xl font-black text-slate-900 tracking-tight">DAILY REPORT</h2>
                 <p className="text-xs font-bold text-teal-800 mt-1 uppercase tracking-wider">{activeProject.name}</p>
               </div>
               <div className="text-right">
                 <span className="text-sm font-bold text-slate-800">{selectedReport?.date || todayFormatted}</span>
-                <p className="text-xs text-slate-500">Status: Verified</p>
               </div>
             </div>
 
@@ -749,7 +776,7 @@ export default function App() {
                 <span className="font-bold text-slate-800">{profile.company}</span>
               </div>
               <div>
-                <span className="text-slate-500 block font-semibold">Preparer:</span>
+                <span className="text-slate-500 block font-semibold">Prepared By:</span>
                 <span className="font-bold text-slate-800">{selectedReport?.prepBy || profile.name}</span>
               </div>
               <div>
@@ -760,6 +787,18 @@ export default function App() {
                 <span className="text-slate-500 block font-semibold">Project Code:</span>
                 <span className="font-bold text-slate-800">{activeProject.code}</span>
               </div>
+              {activeProject.startDate && (
+                <div>
+                  <span className="text-slate-500 block font-semibold">Start Date:</span>
+                  <span className="font-bold text-slate-800">{toDisplay(activeProject.startDate)}</span>
+                </div>
+              )}
+              {activeProject.endDate && (
+                <div>
+                  <span className="text-slate-500 block font-semibold">End Date:</span>
+                  <span className="font-bold text-slate-800">{toDisplay(activeProject.endDate)}</span>
+                </div>
+              )}
             </div>
 
             <div>
@@ -899,6 +938,30 @@ export default function App() {
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-base font-medium focus:ring-2 focus:ring-teal-600 focus:bg-white"
                 />
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    value={tempProject.startDate || ""}
+                    onChange={(e) => setTempProject({ ...tempProject, startDate: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-base font-medium focus:ring-2 focus:ring-teal-600 focus:bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">End Date</label>
+                  <input
+                    type="date"
+                    value={tempProject.endDate || ""}
+                    min={tempProject.startDate || undefined}
+                    onChange={(e) => setTempProject({ ...tempProject, endDate: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-base font-medium focus:ring-2 focus:ring-teal-600 focus:bg-white"
+                  />
+                </div>
+              </div>
+              <p className="text-sm text-slate-500 -mt-2">
+                Optional. For projects done in sequences, you can enter the current sequence's dates.
+              </p>
 
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
                 {tempProject.id && (

@@ -14,14 +14,14 @@ A field-ready, offline-first Progressive Web App (PWA) for construction superint
 - **🖼️ Cloud Photo Storage** – Photos are uploaded once to a private Supabase Storage bucket (one folder per user, protected by a security policy) and downloaded only on devices that don't have them yet. Reports in the cloud store just each photo's ID, caption, and location. Removing a photo, deleting a report, or deleting a project also deletes the photo files from Storage.
 - **🆕 Clean Start for New Users** – New accounts start empty: a "Welcome!" profile card with a **Set Up Profile** button and an **Add your first project** screen. Old sample data is removed automatically from devices (only if it was never edited or synced).
 - **✉️ Invite-Only Testing** – Public sign-ups are turned off in Supabase. Testers are invited from **Authentication → Users → Invite user**; the invite link opens a **Set Password** screen, then the dashboard.
-- **🗂️ Project Management** – Add, edit, and delete projects (name, code, location). The newest project appears as the first tab and opens by default. Deleting a project also deletes its reports, after a confirmation warning. Deleting the last project returns to the "Add your first project" screen.
+- **🗂️ Project Management** – Add, edit, and delete projects (name, code, location, and optional start and end dates, which appear on the report when filled in). The newest project appears as the first tab and opens by default. Deleting a project also deletes its reports, after a confirmation warning. Deleting the last project returns to the "Add your first project" screen.
 - **📅 Smart Report Defaults** – New reports open with today's date (with a calendar picker to change it) and the current local weather, fetched automatically from your location. Both can be edited manually.
 - **🎙️ AI Voice Dictation** – Tap **Record**, speak, and tap **Stop**. The recording is transcribed by OpenAI (`gpt-4o-mini-transcribe`) through a Supabase Edge Function, with a built-in list of construction terms (FF&E, RFI, MEP, punch list, and more) to improve spelling of site language. Works on iPhone (Safari) as well as Chrome and Edge. The OpenAI key stays on the server and is never exposed to the app, and only signed-in users can use the function.
 - **✨ AI Cleanup** – Each transcript is tidied by an OpenAI text model (`gpt-4o-mini`) into short, professional bullet points: one fact per bullet, misheard terms fixed from context (e.g. "epiphany" → "FF&E"), filler and side conversations removed, and every number, name, and location kept exactly. If cleanup fails, the plain transcript is used instead.
 - **⌨️ Smart Bullets** – In the notes box, pressing **Enter** starts a new bullet automatically, and tapping into an empty box starts the first one, so typed additions match dictated ones. **Shift + Enter** makes a plain new line.
 - **📡 Offline Voice Notes** – With no signal (or too weak a signal to reach the server), recordings are saved on the device and the form shows how many are waiting. Once the phone is back online, waiting notes are transcribed automatically, added to their report in the order they were recorded, and synced to the cloud.
 - **📸 Photo Documentation & Labeling** – Add photos from the camera or device storage, store them offline, and attach trade or location captions. Photos are automatically resized (max 1600px) and compressed to JPEG before saving, typically about 15–20× smaller (e.g., 2.7 MB → 159 KB). iPhone HEIC photos are converted automatically, so they also work in Windows browsers. In the report, photos are shown in full without cropping.
-- **📄 PDF Export** – Uses the browser's built-in print engine with custom print CSS to produce formatted daily report PDFs, with no external server required. After saving, the report opens straight to the preview, ready to export, with an **Edit Report** button for quick fixes.
+- **📄 PDF Export** – Uses the browser's built-in print engine with custom print CSS to produce formatted **Daily Report** PDFs (industry-neutral title), with no external server required. Pages after the first repeat a header with the project name and report date, and every page shows "Page X of Y". After saving, the report opens straight to the preview, ready to export, with an **Edit Report** button for quick fixes.
 - **👓 Readable on Phones** – Larger, darker text on phones for report previews, field notes, and form fields, tested with users of different ages. Form text is 16px, which also stops iPhones from auto-zooming when a field is tapped.
 - **⚡ Responsive, High-Contrast UI** – Built with React 19, Vite, and Tailwind CSS v4, with high contrast for outdoor visibility.
 
@@ -153,7 +153,7 @@ npm run preview
 
 1. **Sign In** – Accept your invite email and set a password (or sign in if you already have an account). Forgot it? Tap **Forgot password?** to get a reset link by email.
 2. **Profile Setup** – Tap **Set Up Profile** and enter your name, company, and role. They appear on your reports.
-3. **Projects** – Click **Add Project** to create a project. Use the **pencil** next to the project code to edit or delete it.
+3. **Projects** – Click **Add Project** to create a project, optionally with start and end dates (for sequenced projects, use the current sequence's dates). Use the **pencil** next to the project code to edit or delete it.
 4. **Create a Daily Report** – Select a project and click **Add New Report**. Today's date and local weather fill in automatically (allow location access when prompted); change either if needed.
 5. **Voice Dictation** – Tap **Record**, speak your field observations naturally, then tap **Stop**. The AI turns them into clean bullet points. To add something by hand, tap at the end and press **Enter** for a new bullet. No signal? The note is saved and added automatically once you're back online. Just save the report as usual.
 6. **Photos** – Click **+ Add Site Photo**, then add a caption (e.g., "Foundation Pour – Grid C4").
@@ -166,6 +166,7 @@ npm run preview
 ## ⚠️ Known Limitations
 
 - **Older photos:** Reports synced before photo storage was added keep their images inside the report's cloud record. They move to Storage automatically the next time the report is edited and saved.
+- **PDF page header and numbers:** These use CSS page margin rules, which work in Chrome and Edge. Some browsers (notably Safari on iPhone) may not show them yet; the rest of the report prints normally. If the browser's own URL/date appears, uncheck **Headers and footers** in the print dialog.
 - **Email sending:** Supabase's built-in email service is limited to a few emails per hour, which is fine for testing.
 - **Voice dictation:** Accuracy depends on how clearly terms are spoken; the AI cleanup fixes many misheard terms from context, but supers should still review the bullets before saving. Background conversations on a noisy site may be picked up. Holding the phone close or using earbuds with a mic helps.
 - **Offline voice notes:** Notes recorded in a report that is never saved (form cancelled) are discarded after 7 days.
@@ -193,5 +194,7 @@ npm run preview
 - [x] Automatic bullets when typing (Enter key)
 - [x] Edit Report button on the report view
 - [x] New app icon (report page as a microphone, suitable for any field-work industry)
+- [x] PDF polish: "Daily Report" title, "Prepared By", repeating page header, page numbers, removed placeholder "Status: Verified" label
+- [x] Optional project start and end dates (shown on the report)
 - [x] Hosted deployment on Netlify (accessible from any network)
 - [x] Custom app icons and PWA manifest (installable with its own icon)
