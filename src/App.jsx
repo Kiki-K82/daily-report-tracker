@@ -707,19 +707,27 @@ export default function App() {
       ) : (
         /* Detailed Report PDF Preview View */
         <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-6 space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <button
               onClick={() => setActiveView("dashboard")}
               className="flex items-center gap-2 text-sm font-bold text-teal-800 hover:text-teal-900 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-2xs"
             >
               <ArrowLeft className="w-4 h-4" /> Back to Dashboard
             </button>
-            <button
-              onClick={handleExportPDF}
-              className="flex items-center gap-2 text-sm font-bold bg-teal-700 text-white px-4 py-2 rounded-xl shadow-md hover:bg-teal-800 transition"
-            >
-              <Download className="w-4 h-4" /> Export PDF Report
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleOpenReportForm(selectedReport)}
+                className="flex items-center gap-2 text-sm font-bold text-teal-800 bg-white px-4 py-2 rounded-xl border border-slate-300 shadow-sm hover:bg-teal-50 transition"
+              >
+                <Pencil className="w-4 h-4" /> Edit Report
+              </button>
+              <button
+                onClick={handleExportPDF}
+                className="flex items-center gap-2 text-sm font-bold bg-teal-700 text-white px-4 py-2 rounded-xl shadow-md hover:bg-teal-800 transition"
+              >
+                <Download className="w-4 h-4" /> Export PDF Report
+              </button>
+            </div>
           </div>
 
           {/* Printable Report Container */}
@@ -1040,9 +1048,11 @@ function ReportFormView({ selectedReport, activeProject, profile, showToast, onS
       const { data, error } = await supabase.functions.invoke("transcribe", { body: form });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      const text = (data?.text || "").trim();
-      if (text) {
-        setBullets((prev) => (prev ? `${prev}\n• ${text}` : `• ${text}`));
+      // Use the cleaned-up bullets (fall back to the plain transcript)
+      const newBullets = data?.bullets?.length ? data.bullets : data?.text ? [data.text.trim()] : [];
+      if (newBullets.length > 0) {
+        const added = newBullets.map((b) => `• ${b}`).join("\n");
+        setBullets((prev) => (prev ? `${prev}\n${added}` : added));
       } else {
         showToast("No speech was detected. Please try again.");
       }
@@ -1098,6 +1108,25 @@ function ReportFormView({ selectedReport, activeProject, profile, showToast, onS
       rec.onstop = () => rec.stream.getTracks().forEach((t) => t.stop());
       rec.stop();
     }
+  };
+
+  // Pressing Enter in the notes box starts a new bullet automatically
+  const handleBulletsKeyDown = (e) => {
+    if (e.key !== "Enter" || e.shiftKey) return; // Shift+Enter = plain new line
+    e.preventDefault();
+    const el = e.target;
+    const { selectionStart: start, selectionEnd: end, value } = el;
+    const insert = value.trim() === "" ? "• " : "\n• ";
+    setBullets(value.slice(0, start) + insert + value.slice(end));
+    // Put the cursor right after the new bullet
+    requestAnimationFrame(() => {
+      el.selectionStart = el.selectionEnd = start + insert.length;
+    });
+  };
+
+  // Tapping into an empty notes box starts the first bullet
+  const handleBulletsFocus = () => {
+    if (bullets.trim() === "") setBullets("• ");
   };
 
   const handleSubmit = (e) => {
@@ -1211,6 +1240,8 @@ function ReportFormView({ selectedReport, activeProject, profile, showToast, onS
             rows={6}
             value={bullets}
             onChange={(e) => setBullets(e.target.value)}
+            onKeyDown={handleBulletsKeyDown}
+            onFocus={handleBulletsFocus}
             className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-base text-slate-800 focus:ring-2 focus:ring-teal-600 focus:bg-white"
             placeholder="AI-generated transcript summary will populate here..."
           />
