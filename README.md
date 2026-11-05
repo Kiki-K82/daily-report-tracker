@@ -21,7 +21,7 @@ A field-ready, offline-first Progressive Web App (PWA) for construction superint
 - **⌨️ Smart Bullets** – In the notes box, pressing **Enter** starts a new bullet automatically, and tapping into an empty box starts the first one, so typed additions match dictated ones. **Shift + Enter** makes a plain new line.
 - **📡 Offline Voice Notes** – With no signal (or too weak a signal to reach the server), recordings are saved on the device and the form shows how many are waiting. Once the phone is back online, waiting notes are transcribed automatically, added to their report in the order they were recorded, and synced to the cloud.
 - **📸 Photo Documentation & Labeling** – Add photos from the camera or device storage, store them offline, and attach trade or location captions. Photos are automatically resized (max 1600px) and compressed to JPEG before saving, typically about 15–20× smaller (e.g., 2.7 MB → 159 KB). iPhone HEIC photos are converted automatically, so they also work in Windows browsers. In the report, photos are shown in full without cropping.
-- **📄 PDF Export** – Uses the browser's built-in print engine with custom print CSS to produce formatted **Daily Report** PDFs (industry-neutral title), with no external server required. Pages after the first repeat a header with the project name and report date, and every page shows "Page X of Y". After saving, the report opens straight to the preview, ready to export, with an **Edit Report** button for quick fixes.
+- **📄 PDF Export** – The app builds the **Daily Report** PDF itself with jsPDF (no browser printing), so it looks identical on iPhone, Android, Chrome, and Edge, and works in the installed home-screen app. Pages after the first repeat a header with the project name and report date, every page shows "Page X of Y", photos appear in rows of 3 and are never split across pages, and photos are resized for the PDF to keep files small (about 1 MB for a report with 10 photos). On phones, **Export PDF Report** opens the Share menu (Mail, Messages, Files); on laptops it downloads the file. Files are named `Daily Report - Project - Date.pdf`. After saving, the report opens straight to the preview, with an **Edit Report** button for quick fixes.
 - **👓 Readable on Phones** – Larger, darker text on phones for report previews, field notes, and form fields, tested with users of different ages. Form text is 16px, which also stops iPhones from auto-zooming when a field is tapped.
 - **⚡ Responsive, High-Contrast UI** – Built with React 19, Vite, and Tailwind CSS v4, with high contrast for outdoor visibility.
 
@@ -39,7 +39,7 @@ A field-ready, offline-first Progressive Web App (PWA) for construction superint
 | Weather | Open-Meteo API (free, no API key) + browser Geolocation |
 | Photo Processing | Browser Canvas API (resize & compress) + heic2any (HEIC → JPEG) |
 | Speech-to-Text | Browser `MediaRecorder` + OpenAI transcription API via Supabase Edge Function (`transcribe`) |
-| PDF Export | Browser print engine (`window.print()` + `@media print`) |
+| PDF Export | jsPDF (built in the app, loaded only when exporting) + Web Share API on phones |
 
 ## 📁 Project Structure
 
@@ -60,6 +60,7 @@ daily-report-tracker/
 │   ├── supabase.js        # Supabase connection
 │   ├── sync.js            # Offline-first cloud sync (send & receive)
 │   ├── voiceQueue.js      # Offline voice notes: transcribe when back online
+│   ├── pdf.js             # Builds the Daily Report PDF (jsPDF)
 │   ├── main.jsx           # Application entry point
 │   └── index.css          # Tailwind directives & @media print styles
 ├── .env.local             # Supabase settings (not committed to Git)
@@ -157,7 +158,7 @@ npm run preview
 4. **Create a Daily Report** – Select a project and click **Add New Report**. Today's date and local weather fill in automatically (allow location access when prompted); change either if needed.
 5. **Voice Dictation** – Tap **Record**, speak your field observations naturally, then tap **Stop**. The AI turns them into clean bullet points. To add something by hand, tap at the end and press **Enter** for a new bullet. No signal? The note is saved and added automatically once you're back online. Just save the report as usual.
 6. **Photos** – Click **+ Add Site Photo**, then add a caption (e.g., "Foundation Pour – Grid C4").
-7. **Save & Export** – Click **Save Report**. The finished report opens immediately; click **Export PDF Report** to save or print it, or **Edit Report** to make changes.
+7. **Save & Export** – Click **Save Report**. The finished report opens immediately. Click **Export PDF Report**: on a phone, choose Mail, Messages, or Files from the Share menu (if the button changes to **Share PDF**, tap it once more); on a laptop, the PDF downloads. Use **Edit Report** to make changes.
 8. **Sync** – Happens automatically. Use **Sync Now** to sync immediately. Sign in on another device to see the same reports.
 9. **Sign Out** – Sends unsent changes, then clears the device. Your data stays in the cloud.
 
@@ -166,7 +167,8 @@ npm run preview
 ## ⚠️ Known Limitations
 
 - **Older photos:** Reports synced before photo storage was added keep their images inside the report's cloud record. They move to Storage automatically the next time the report is edited and saved.
-- **PDF page header and numbers:** These use CSS page margin rules, which work in Chrome and Edge. Some browsers (notably Safari on iPhone) may not show them yet; the rest of the report prints normally. If the browser's own URL/date appears, uncheck **Headers and footers** in the print dialog.
+- **PDF fonts:** The PDF uses a standard built-in font, so a few special characters outside Western European languages (for example "č", "ć", "đ") may not display correctly.
+- **"Powered by Netlify" badge:** Shown on the free plan for new public projects; removing it requires a paid Netlify plan (or another host).
 - **Email sending:** Supabase's built-in email service is limited to a few emails per hour, which is fine for testing.
 - **Voice dictation:** Accuracy depends on how clearly terms are spoken; the AI cleanup fixes many misheard terms from context, but supers should still review the bullets before saving. Background conversations on a noisy site may be picked up. Holding the phone close or using earbuds with a mic helps.
 - **Offline voice notes:** Notes recorded in a report that is never saved (form cancelled) are discarded after 7 days.
@@ -196,5 +198,7 @@ npm run preview
 - [x] New app icon (report page as a microphone, suitable for any field-work industry)
 - [x] PDF polish: "Daily Report" title, "Prepared By", repeating page header, page numbers, removed placeholder "Status: Verified" label
 - [x] Optional project start and end dates (shown on the report)
+- [x] App-built PDFs (jsPDF): same on every device, works in the home-screen app, small files, Share menu on phones
+- [x] Pop-up messages moved to the top of the screen
 - [x] Hosted deployment on Netlify (accessible from any network)
 - [x] Custom app icons and PWA manifest (installable with its own icon)
