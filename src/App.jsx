@@ -38,37 +38,60 @@ export default function App() {
 
   const reportRef = React.useRef(null);
 
-  const handleExportPDF = () => {
-    showToast("Opening print dialog... Select 'Save as PDF'");
+  // --- Export: build the PDF in the app, then share (phones) or download (laptops) ---
+  const handleExportPDF = async () => {
+    if (!selectedReport) return;
+    setIsExporting(true);
+    try {
+      const { buildReportPdf } = await import("./pdf"); // load the PDF tool only when needed
+      const blob = await buildReportPdf({ report: selectedReport, project: activeProject, profile });
 
-    // Add a repeating header (pages 2+) and page numbers (every page) to the printout
-    const clean = (s) => String(s || "").replace(/["\\]/g, ""); // remove characters that would break the CSS
-    const projectName = clean(activeProject?.name).toUpperCase();
-    const reportDate = clean(selectedReport?.date || todayFormatted);
+      const safe = (s) => String(s || "").replace(/[\\/:*?"<>|]/g, "").trim();
+      const fileName = `Daily Report - ${safe(activeProject?.name)} - ${safe(selectedReport.date)}.pdf`;
+      const file = new File([blob], fileName, { type: "application/pdf" });
 
-    const style = document.createElement("style");
-    style.textContent = `
-      @page {
-        margin: 16mm 14mm;
-        @top-left { content: "DAILY REPORT · ${projectName}"; font-size: 9pt; font-weight: 700; color: #134e4a; }
-        @top-right { content: "${reportDate}"; font-size: 9pt; font-weight: 700; color: #0f172a; }
-        @bottom-center { content: "Page " counter(page) " of " counter(pages); font-size: 9pt; color: #64748b; }
+      // Phones and tablets: open the Share menu (email, text, save to Files)
+      const isTouchDevice = window.matchMedia("(pointer: coarse)").matches;
+      if (isTouchDevice && navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: fileName });
+          return;
+        } catch (err) {
+          if (err.name === "AbortError") return; // the user closed the Share menu
+          if (err.name === "NotAllowedError") {
+            // Building took too long for the phone to allow sharing right away: ask for one more tap
+            setPdfToShare(file);
+            showToast("Your PDF is ready. Tap Share PDF to send it.");
+            return;
+          }
+        }
       }
-      @page :first {
-        @top-left { content: none; }
-        @top-right { content: none; }
-      }
-    `;
-    document.head.appendChild(style);
 
-    // Remove these print settings again once printing is done
-    const cleanup = () => {
-      style.remove();
-      window.removeEventListener("afterprint", cleanup);
-    };
-    window.addEventListener("afterprint", cleanup);
+      // Laptops (or if sharing isn't available): download the file
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showToast("PDF downloaded.");
+    } catch (err) {
+      console.error("PDF export failed:", err);
+      showToast("Could not create the PDF. Please try again.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
-    window.print();
+  // Second tap: share the PDF that's already built
+  const handleSharePdf = async () => {
+    try {
+      await navigator.share({ files: [pdfToShare], title: pdfToShare.name });
+    } catch (err) {
+      if (err.name !== "AbortError") showToast("Could not open the Share menu.");
+    } finally {
+      setPdfToShare(null);
+    }
   };
 
   // --- State with LocalStorage Persistence ---
@@ -77,6 +100,8 @@ export default function App() {
   const [selectedReport, setSelectedReport] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [toastMessage, setToastMessage] = useState("");
+  const [isExporting, setIsExporting] = useState(false); // true while the PDF is being built
+  const [pdfToShare, setPdfToShare] = useState(null);    // a finished PDF waiting for a second tap
 
   const [profile, setProfile] = useState(DEFAULT_PROFILE);
   const [reports, setReports] = useState([]);
@@ -458,9 +483,9 @@ export default function App() {
     <div className="min-h-screen bg-slate-100 text-slate-800 font-sans flex flex-col">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-bounce border border-teal-500">
-          <Check className="w-5 h-5 text-teal-400" />
-          <span className="text-sm font-medium">{toastMessage}</span>
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-md bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 border border-teal-500">
+          <Check className="w-5 h-5 text-teal-400 shrink-0" />
+          <span className="text-base font-medium">{toastMessage}</span>
         </div>
       )}
 
@@ -749,12 +774,22 @@ export default function App() {
               >
                 <Pencil className="w-4 h-4" /> Edit Report
               </button>
-              <button
-                onClick={handleExportPDF}
-                className="flex items-center gap-2 text-sm font-bold bg-teal-700 text-white px-4 py-2 rounded-xl shadow-md hover:bg-teal-800 transition"
-              >
-                <Download className="w-4 h-4" /> Export PDF Report
-              </button>
+              {pdfToShare ? (
+                <button
+                  onClick={handleSharePdf}
+                  className="flex items-center gap-2 text-sm font-bold bg-teal-700 text-white px-4 py-2 rounded-xl shadow-md hover:bg-teal-800 transition"
+                >
+                  <Download className="w-4 h-4" /> Share PDF
+                </button>
+              ) : (
+                <button
+                  onClick={handleExportPDF}
+                  disabled={isExporting}
+                  className="flex items-center gap-2 text-sm font-bold bg-teal-700 text-white px-4 py-2 rounded-xl shadow-md hover:bg-teal-800 disabled:opacity-60 transition"
+                >
+                  <Download className="w-4 h-4" /> {isExporting ? "Creating PDF..." : "Export PDF Report"}
+                </button>
+              )}
             </div>
           </div>
 
