@@ -686,47 +686,31 @@ export default function App() {
                     {projectReports.map((report) => (
                       <div
                         key={report.id}
-                        className="group bg-slate-50 hover:bg-slate-100/90 border border-slate-200 hover:border-teal-300 rounded-xl p-4 transition duration-150 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-2xs"
+                        className="group bg-slate-50 hover:bg-slate-100/90 border border-slate-200 hover:border-teal-300 rounded-xl px-3 py-2.5 sm:px-4 transition duration-150 flex items-center gap-1.5 shadow-2xs"
                       >
                         <button
                           onClick={() => handleOpenViewReport(report)}
-                          className="text-left flex-1 space-y-1.5 focus:outline-none"
+                          className="flex-1 min-w-0 flex flex-col gap-1 text-left focus:outline-none"
                         >
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <span className="px-3 py-1 bg-teal-900 text-white font-semibold text-xs rounded-lg shadow-2xs">
-                              {report.date}
-                            </span>
-                            <h4 className="font-bold text-slate-800 text-base group-hover:text-teal-900 transition flex items-center gap-1.5">
-                              {report.title}
-                              <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 text-teal-700 transition" />
-                            </h4>
-                          </div>
-                          <p className="text-base md:text-sm text-slate-600 line-clamp-1 pr-4 whitespace-pre-line">
-                            {report.bullets}
-                          </p>
-                          <div className="flex flex-wrap items-center gap-3 text-sm md:text-xs text-slate-600 font-medium">
-                            <span>Weather: {report.weather}</span>
-                            <span>•</span>
-                            <span>By: {report.prepBy}</span>
-                          </div>
+                          <span className="font-bold text-slate-800 text-base leading-snug line-clamp-2 group-hover:text-teal-900 transition">
+                            {report.title}
+                          </span>
+                          <span className="text-sm font-semibold text-teal-700">{report.date}</span>
                         </button>
-
-                        <div className="flex items-center gap-2 border-t md:border-t-0 pt-3 md:pt-0 border-slate-200 justify-end">
-                          <button
-                            onClick={() => handleOpenReportForm(report)}
-                            title="Edit Report"
-                            className="p-2 text-slate-600 hover:text-teal-800 hover:bg-teal-100 rounded-lg transition"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteReport(report.id, report.title)}
-                            title="Delete Report"
-                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => handleOpenReportForm(report)}
+                          title="Edit Report"
+                          className="shrink-0 p-2.5 text-slate-600 hover:text-teal-800 hover:bg-teal-100 rounded-lg transition"
+                        >
+                          <Pencil className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteReport(report.id, report.title)}
+                          title="Delete Report"
+                          className="shrink-0 p-2.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -1227,6 +1211,15 @@ function ReportFormView({ selectedReport, activeProject, profile, showToast, onS
     if (bullets.trim() === "") setBullets("• ");
   };
 
+  // Warn before leaving a new, unsaved report that has voice notes waiting
+  const confirmLeave = () =>
+    pendingNotes === 0 ||
+    selectedReport || // an existing report keeps its notes even if you leave
+    window.confirm(
+      `You have ${pendingNotes} voice note${pendingNotes > 1 ? "s" : ""} waiting for signal.\n\n` +
+      `If you leave without saving, ${pendingNotes > 1 ? "they" : "it"} will be lost. Leave anyway?`
+    );
+
   const handleSubmit = (e) => {
     e.preventDefault();
     cancelRecording();
@@ -1248,6 +1241,7 @@ function ReportFormView({ selectedReport, activeProject, profile, showToast, onS
         <button
           type="button"
           onClick={() => {
+            if (!confirmLeave()) return;
             cancelRecording();
             onCancel();
           }}
@@ -1331,7 +1325,7 @@ function ReportFormView({ selectedReport, activeProject, profile, showToast, onS
           <label className="block text-sm font-bold text-slate-800">AI Bulletin Report Summary</label>
           {pendingNotes > 0 && (
             <div className="text-base rounded-xl p-3 border bg-amber-50 border-amber-200 text-amber-900">
-              {pendingNotes} voice note{pendingNotes > 1 ? "s" : ""} waiting for signal. Save the report as usual, and the text will be added automatically once you're back online.
+              {pendingNotes} voice note{pendingNotes > 1 ? "s" : ""} waiting for signal. The text will appear once you're back online. Tap Save Report now so it isn't lost.
             </div>
           )}
           <textarea
@@ -1343,6 +1337,11 @@ function ReportFormView({ selectedReport, activeProject, profile, showToast, onS
             className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-base text-slate-800 focus:ring-2 focus:ring-teal-600 focus:bg-white"
             placeholder="AI-generated transcript summary will populate here..."
           />
+          <p className="text-sm text-slate-600">
+            <span className="font-bold text-amber-700">*</span> No signal? Your recording is saved on your phone,
+            but the text will not appear here until you are back online. Please tap <strong>Save Report</strong> so
+            it is added to this report automatically.
+          </p>
         </div>
 
         {/* Photo Attachment Section */}
@@ -1398,7 +1397,7 @@ function ReportFormView({ selectedReport, activeProject, profile, showToast, onS
 
         {/* Actions */}
         <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-          <button type="button" onClick={() => { cancelRecording(); onCancel(); }} className="px-5 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-200 transition">
+          <button type="button" onClick={() => { if (!confirmLeave()) return; cancelRecording(); onCancel(); }} className="px-5 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-200 transition">
             Cancel
           </button>
           <button type="submit" className="px-6 py-2.5 bg-teal-700 text-white rounded-xl text-sm font-bold hover:bg-teal-800 transition shadow-md">
