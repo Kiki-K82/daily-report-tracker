@@ -612,13 +612,14 @@ export default function App() {
                     <button
                       key={proj.id}
                       onClick={() => setActiveTab(proj.id)}
-                      className={`px-5 py-3 rounded-t-xl font-semibold text-sm transition flex items-center gap-2.5 whitespace-nowrap border-t border-x ${isActive
+                      title={proj.name}
+                      className={`max-w-[10rem] sm:max-w-[14rem] px-5 py-3 rounded-t-xl font-semibold text-sm transition flex items-center gap-2.5 whitespace-nowrap border-t border-x ${isActive
                         ? "bg-white text-teal-900 border-slate-300 border-b-white font-bold shadow-sm -mb-[1px]"
                         : "bg-slate-200/80 text-slate-600 hover:bg-slate-300/80 border-transparent"
                         }`}
                     >
-                      <span>{proj.name}</span>
-                      <span className={`px-2 py-0.5 rounded-full text-xs ${isActive ? "bg-teal-100 text-teal-800" : "bg-slate-300 text-slate-700"}`}>
+                      <span className="truncate">{proj.name}</span>
+                      <span className={`shrink-0 px-2 py-0.5 rounded-full text-xs ${isActive ? "bg-teal-100 text-teal-800" : "bg-slate-300 text-slate-700"}`}>
                         {count}
                       </span>
                     </button>
