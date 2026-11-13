@@ -652,13 +652,13 @@ export default function App() {
               <div className="bg-white rounded-b-2xl rounded-tr-2xl p-5 md:p-6 shadow-sm border border-slate-200 space-y-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-slate-100">
                   <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-2xl font-bold text-slate-900">{activeProject.name}</h2>
-                      <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md font-mono border border-slate-200">{activeProject.code}</span>
+                    <div className="flex items-start gap-2">
+                      <h2 className="text-lg font-bold text-slate-900 leading-snug">{activeProject.name}</h2>
+                      <span className="shrink-0 text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md font-mono border border-slate-200">{activeProject.code}</span>
                       <button
                         onClick={handleOpenEditProject}
                         title="Edit Project"
-                        className="p-2 text-slate-600 hover:text-teal-800 hover:bg-teal-100 rounded-lg transition"
+                        className="shrink-0 p-2 text-slate-600 hover:text-teal-800 hover:bg-teal-100 rounded-lg transition"
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
