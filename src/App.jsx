@@ -107,6 +107,7 @@ export default function App() {
   const [reports, setReports] = useState([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false); // profile dropdown open/closed
   const [tempProfile, setTempProfile] = useState({ ...profile });
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [tempProject, setTempProject] = useState({ id: null, name: "", code: "", location: "", startDate: "", endDate: "" });
@@ -442,6 +443,10 @@ export default function App() {
   }, [session?.user?.id, isLoaded]);
 
   const activeProject = projects.find((p) => p.id === activeTab) || projects[0];
+  // Initials for the profile button (e.g. "Jason Johnson" → "JJ")
+  const initials = profile.name
+    ? profile.name.trim().split(/\s+/).map((n) => n[0]).join("").slice(0, 2).toUpperCase()
+    : "";
   const projectReports = reports
     .filter((r) => r.projectId === activeTab)
     .filter((r) =>
@@ -490,87 +495,73 @@ export default function App() {
       )}
 
       {/* Main Top Header Navbar */}
-      <header className="bg-teal-900 text-white shadow-md border-b border-teal-800">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <img src="/favicon.svg" alt="Daily Report Tracker logo" className="w-10 h-10 rounded-lg" />
-            <div>
-              <h1 className="font-bold text-lg tracking-wide leading-none">Daily Report Tracker</h1>
-              <p className="text-xs text-teal-300 font-light mt-0.5">Field Inspection & AI Dictation</p>
-            </div>
-          </div>
-          <div className="text-right hidden sm:block">
-            <span className="text-xs bg-teal-800 text-teal-200 px-3 py-1 rounded-full font-medium inline-flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5" />
-              {todayFormatted}
-            </span>
-          </div>
-        </div>
-      </header>
+<header className="bg-teal-900 text-white shadow-md border-b border-teal-800">
+  <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+    <div className="flex items-center gap-3 min-w-0">
+      <img src="/favicon.svg" alt="Daily Report Tracker logo" className="w-10 h-10 rounded-lg shrink-0" />
+      <div className="min-w-0">
+        <h1 className="font-bold text-lg tracking-wide leading-none truncate">Daily Report Tracker</h1>
+        <p className="text-xs text-teal-300 font-light mt-0.5 truncate">Field Inspection & AI Dictation</p>
+      </div>
+    </div>
 
-      {/* View Switcher: Dashboard View vs. Forms View */}
-      {activeView === "dashboard" ? (
-        <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-6 space-y-6">
-          {/* User Profile Card */}
-          <section className="bg-white rounded-2xl p-5 md:p-6 shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between md:items-center gap-4">
-            <div className="flex items-start md:items-center space-x-4">
-              <div className="w-14 h-14 rounded-2xl bg-teal-800 text-teal-100 flex items-center justify-center font-bold text-xl shadow-inner border border-teal-700">
-                {profile.name ? profile.name.split(' ').map(n => n[0]).join('') : <User className="w-7 h-7" />}
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-xl font-bold text-slate-900">{profile.name || "Welcome!"}</h2>
-                  <span className="text-xs font-semibold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md">Signed In</span>
-                </div>
-                {profile.name ? (
-                  <div className="flex flex-wrap items-center text-sm text-slate-600 gap-x-4 gap-y-1">
-                    {profile.company && (
-                      <span className="flex items-center gap-1">
-                        <Building2 className="w-4 h-4 text-teal-700" />
-                        <strong>{profile.company}</strong>
-                      </span>
-                    )}
-                    {profile.role && (
-                      <span className="flex items-center gap-1 text-slate-500">
-                        <User className="w-4 h-4 text-slate-400" />
-                        {profile.role}
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-base text-slate-600">
-                    Add your name and company so they appear on your reports.
-                  </p>
-                )}
-              </div>
-            </div>
+    <div className="flex items-center gap-2 shrink-0">
+      {/* Sync button */}
+      <button
+        onClick={() => handleSync()}
+        disabled={isSyncing}
+        title="Sync now"
+        aria-label="Sync now"
+        className="w-11 h-11 rounded-xl bg-teal-800 hover:bg-teal-700 disabled:opacity-60 flex items-center justify-center transition"
+      >
+        <RefreshCw className={`w-5 h-5 ${isSyncing ? "animate-spin" : ""}`} />
+      </button>
 
-            <div className="flex flex-wrap gap-2 self-start md:self-center">
+      {/* Profile button + dropdown menu */}
+      <div className="relative">
+        <button
+          onClick={() => setIsMenuOpen((open) => !open)}
+          title="Profile"
+          aria-label="Profile menu"
+          className="w-11 h-11 rounded-full bg-teal-300 text-teal-950 font-bold flex items-center justify-center"
+        >
+          {initials || <User className="w-5 h-5" />}
+        </button>
+
+        {isMenuOpen && (
+          <>
+            {/* Tapping anywhere outside closes the menu */}
+            <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)} />
+            <div className="absolute right-0 mt-2 w-60 bg-white text-slate-800 rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-100">
+                <p className="font-bold text-base truncate">{profile.name || "Welcome!"}</p>
+                <p className="text-sm text-slate-500 truncate">{profile.company || "Add your name and company"}</p>
+              </div>
               <button
-                onClick={handleOpenEditProfile}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl text-sm transition flex items-center gap-2 border border-slate-300"
+                onClick={() => { setIsMenuOpen(false); handleOpenEditProfile(); }}
+                className="w-full flex items-center gap-3 px-4 py-3 text-base hover:bg-slate-50"
               >
-                <Pencil className="w-4 h-4 text-slate-600" />
+                <Pencil className="w-4 h-4 text-slate-500" />
                 {profile.name ? "Edit Profile" : "Set Up Profile"}
               </button>
-
               <button
-                onClick={() => handleSync()}
-                disabled={isSyncing}
-                className="px-4 py-2 bg-teal-700 hover:bg-teal-800 disabled:opacity-60 text-white font-medium rounded-xl text-sm transition flex items-center gap-2"
-              >
-                <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin" : ""}`} />
-                {isSyncing ? "Syncing..." : "Sync Now"}
-              </button>
-              <button
-                onClick={handleSignOut}
-                className="px-4 py-2 bg-white hover:bg-red-50 text-red-700 font-medium rounded-xl text-sm transition flex items-center gap-2 border border-red-200"
+                onClick={() => { setIsMenuOpen(false); handleSignOut(); }}
+                className="w-full flex items-center gap-3 px-4 py-3 text-base text-red-700 hover:bg-red-50 border-t border-slate-100"
               >
                 <LogOut className="w-4 h-4" />
                 Sign Out
               </button>
             </div>
-          </section>
+          </>
+        )}
+      </div>
+    </div>
+  </div>
+</header>
+
+      {/* View Switcher: Dashboard View vs. Forms View */}
+      {activeView === "dashboard" ? (
+        <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-6 space-y-6">
 
           {/* Shown when there are no projects yet */}
           {projects.length === 0 && (
