@@ -8,11 +8,11 @@ A field-ready, offline-first Progressive Web App (PWA) for construction superint
 
 - **📱 Installable PWA** – Installs on iOS, Android, macOS, and Windows with its own app icon (a report page as a microphone, to show voice-first reporting for any field-work industry) and home-screen name ("Daily Reports"). Critical assets and icons are cached locally, so the app opens and runs in job site dead zones with no cell service.
 - **🔐 Accounts & Login** – Email and password sign-up with email confirmation (Supabase Auth), plus **Forgot password** (reset link by email, then a Set New Password screen). Users stay signed in on their device, and the sign-in check works offline. Row Level Security ensures each user can only see and change their own data.
-- **☁️ Offline-First Cloud Sync** – Every change is saved on the device first, marked as unsent, and synced to Supabase automatically: when the app opens, a few seconds after each change, when the connection returns after a dead zone, and every 5 minutes (plus a manual **Sync Now** button). Changes from other devices are downloaded, the newest version wins, and unsent local edits are never overwritten. Deletions sync too.
+- **☁️ Offline-First Cloud Sync** – Every change is saved on the device first, marked as unsent, and synced to Supabase automatically: when the app opens, a few seconds after each change, when the connection returns after a dead zone, and every 5 minutes (plus a **sync button** in the header). Changes from other devices are downloaded, the newest version wins, and unsent local edits are never overwritten. Deletions sync too.
 - **🚪 Safe Sign-Out** – Signing out sends any unsent changes first, warns if something couldn't be sent, then clears the device so the next person can't see the previous user's reports. Data returns automatically on the next sign-in.
 - **💾 Offline Storage with IndexedDB** – Profiles, reports, and photos are stored on the device in IndexedDB (via Dexie.js), so the app works fully without signal. The app only confirms a save after the data is actually stored.
 - **🖼️ Cloud Photo Storage** – Photos are uploaded once to a private Supabase Storage bucket (one folder per user, protected by a security policy) and downloaded only on devices that don't have them yet. Reports in the cloud store just each photo's ID, caption, and location. Removing a photo, deleting a report, or deleting a project also deletes the photo files from Storage.
-- **🆕 Clean Start for New Users** – New accounts start empty: a "Welcome!" profile card with a **Set Up Profile** button and an **Add your first project** screen. Old sample data is removed automatically from devices (only if it was never edited or synced).
+- **🆕 Clean Start for New Users** – New accounts start empty: the profile menu shows "Welcome!" with a **Set Up Profile** option, and the dashboard shows an **Add your first project** screen. Old sample data is removed automatically from devices (only if it was never edited or synced).
 - **✉️ Invite-Only Testing** – Public sign-ups are turned off in Supabase. Testers are invited from **Authentication → Users → Invite user**; the invite link opens a **Set Password** screen, then the dashboard.
 - **🗂️ Project Management** – Add, edit, and delete projects (name, code, location, and optional start and end dates, which appear on the report when filled in). The newest project appears as the first tab and opens by default. Deleting a project also deletes its reports, after a confirmation warning. Deleting the last project returns to the "Add your first project" screen.
 - **📅 Smart Report Defaults** – New reports open with today's date (with a calendar picker to change it) and the current local weather, fetched automatically from your location. Both can be edited manually.
@@ -22,6 +22,7 @@ A field-ready, offline-first Progressive Web App (PWA) for construction superint
 - **📡 Offline Voice Notes** – With no signal (or too weak a signal to reach the server), recordings are saved on the device and the form shows how many are waiting. A note under the notes box explains that the text won't appear until the phone is back online and that **Save Report** must be tapped. Leaving a new, unsaved report with waiting notes shows a warning so they aren't lost. Once the phone is back online, waiting notes are transcribed automatically, added to their report in the order they were recorded, and synced to the cloud.
 - **📸 Photo Documentation & Labeling** – Add photos from the camera or device storage, store them offline, and attach trade or location captions. Photos are automatically resized (max 1600px) and compressed to JPEG before saving, typically about 15–20× smaller (e.g., 2.7 MB → 159 KB). iPhone HEIC photos are converted automatically, so they also work in Windows browsers. In the report, photos are shown in full without cropping.
 - **📄 PDF Export** – The app builds the **Daily Report** PDF itself with jsPDF (no browser printing), so it looks identical on iPhone, Android, Chrome, and Edge, and works in the installed home-screen app. Pages after the first repeat a header with the project name and report date, every page shows "Page X of Y", photos appear in rows of 3 and are never split across pages, and photos are resized for the PDF to keep files small (about 1 MB for a report with 10 photos). On phones, **Export PDF Report** opens the Share menu (Mail, Messages, Files); on laptops it downloads the file. Files are named `Daily Report - Project - Date.pdf`. After saving, the report opens straight to the preview, with an **Edit Report** button for quick fixes.
+- **🧭 Simple Dashboard** – A clean header with a **sync** icon (spins while syncing) and a round **profile button** with the user's initials, which opens a menu with **Edit Profile** and **Sign Out**. A yellow **No signal** banner appears on every screen when the phone is offline and shows how many reports are saved on the phone, waiting to sync. A small **+ Add Project** link sits above the project tabs. Tabs are narrower on phones (about 2½ visible, swipe for more), long names are cut off with "…", and the full name shows on hover. The project name is smaller and wraps neatly next to the project code. A large **Add New Report** button floats at the bottom of the screen and stays in place while scrolling.
 - **📋 Clean Report List** – Each report shows only its full title (wrapping to two lines if needed) with the date below, plus large Edit and Delete buttons, so the report history is easy to scan on a phone. Search still finds reports by their note text.
 - **👓 Readable on Phones** – Larger, darker text on phones for report previews, field notes, and form fields, tested with users of different ages. Form text is 16px, which also stops iPhones from auto-zooming when a field is tapped.
 - **⚡ Responsive, High-Contrast UI** – Built with React 19, Vite, and Tailwind CSS v4, with high contrast for outdoor visibility.
@@ -149,19 +150,19 @@ npm run preview
 
 1. Open the preview URL (usually http://localhost:4173/).
 2. Press **F12** to open Developer Tools.
-3. In the **Network** tab, set throttling to **Offline** (or check **Offline** under **Application → Service Workers**), then refresh the page.
+3. In the **Network** tab, set throttling to **Offline** (or check **Offline** under **Application → Service Workers**), then refresh the page. A yellow **No signal** banner appears under the header.
 
 ## 📝 Usage Guide
 
 1. **Sign In** – Accept your invite email and set a password (or sign in if you already have an account). Forgot it? Tap **Forgot password?** to get a reset link by email.
-2. **Profile Setup** – Tap **Set Up Profile** and enter your name, company, and role. They appear on your reports.
-3. **Projects** – Click **Add Project** to create a project, optionally with start and end dates (for sequenced projects, use the current sequence's dates). Use the **pencil** next to the project code to edit or delete it.
-4. **Create a Daily Report** – Select a project and click **Add New Report**. Today's date and local weather fill in automatically (allow location access when prompted); change either if needed.
+2. **Profile Setup** – Tap the round profile button at the top right, then **Set Up Profile**, and enter your name, company, and role. They appear on your reports.
+3. **Projects** – Tap **+ Add Project** above the tabs to create a project, optionally with start and end dates (for sequenced projects, use the current sequence's dates). Use the **pencil** next to the project code to edit or delete it.
+4. **Create a Daily Report** – Select a project tab and tap the **Add New Report** button at the bottom of the screen. Today's date and local weather fill in automatically (allow location access when prompted); change either if needed.
 5. **Voice Dictation** – Tap **Record**, speak your field observations naturally, then tap **Stop**. The AI turns them into clean bullet points. To add something by hand, tap at the end and press **Enter** for a new bullet. No signal? The note is saved and added automatically once you're back online. Just save the report as usual.
 6. **Photos** – Click **+ Add Site Photo**, then add a caption (e.g., "Foundation Pour – Grid C4").
 7. **Save & Export** – Click **Save Report**. The finished report opens immediately. Click **Export PDF Report**: on a phone, choose Mail, Messages, or Files from the Share menu (if the button changes to **Share PDF**, tap it once more); on a laptop, the PDF downloads. Use **Edit Report** to make changes.
-8. **Sync** – Happens automatically. Use **Sync Now** to sync immediately. Sign in on another device to see the same reports.
-9. **Sign Out** – Sends unsent changes, then clears the device. Your data stays in the cloud.
+8. **Sync** – Happens automatically. Tap the **sync icon** at the top right to sync immediately. With no signal, a yellow banner shows how many reports are waiting. Sign in on another device to see the same reports.
+9. **Sign Out** – Tap the profile button, then **Sign Out**. It sends unsent changes, then clears the device. Your data stays in the cloud.
 
 ![Daily report view](docs/reportpage.png)
 
@@ -169,7 +170,7 @@ npm run preview
 
 - **Older photos:** Reports synced before photo storage was added keep their images inside the report's cloud record. They move to Storage automatically the next time the report is edited and saved.
 - **PDF fonts:** The PDF uses a standard built-in font, so a few special characters outside Western European languages (for example "č", "ć", "đ") may not display correctly.
-- **"Powered by Netlify" badge:** Shown on the free plan for new public projects; removing it requires a paid Netlify plan (or another host).
+- **"Powered by Netlify" badge:** Shown on the free plan for new public projects; removing it requires a paid Netlify plan (or another host). The floating **Add New Report** button is raised to sit above the badge; without the badge, change `bottom-[4.25rem]` to `bottom-5` in `App.jsx`.
 - **Email sending:** Supabase's built-in email service is limited to a few emails per hour, which is fine for testing.
 - **Voice dictation:** Accuracy depends on how clearly terms are spoken; the AI cleanup fixes many misheard terms from context, but supers should still review the bullets before saving. Background conversations on a noisy site may be picked up. Holding the phone close or using earbuds with a mic helps.
 - **Offline voice notes:** Notes recorded in a report that is never saved (form cancelled) are discarded after 7 days.
@@ -203,6 +204,7 @@ npm run preview
 - [x] Pop-up messages moved to the top of the screen
 - [x] Offline voice note reminder and leave-without-saving warning
 - [x] Cleaner report list (title with date below)
+- [x] Cleaner dashboard: header sync icon and profile menu, No signal banner, Add Project link, narrower tabs, smaller project name, floating Add New Report button
 - [ ] Archive finished projects (keep reports, hide tabs), with export options
 - [ ] Ideas from pilot feedback: daily report reminders, location-based project suggestion, larger-screen layout
 - [x] Hosted deployment on Netlify (accessible from any network)
