@@ -108,6 +108,8 @@ export default function App() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false); // profile dropdown open/closed
+  const [isOnline, setIsOnline] = useState(navigator.onLine); // true when the phone has signal
+  const [unsentCount, setUnsentCount] = useState(0);          // reports not yet sent to the cloud
   const [tempProfile, setTempProfile] = useState({ ...profile });
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [tempProject, setTempProject] = useState({ id: null, name: "", code: "", location: "", startDate: "", endDate: "" });
@@ -442,6 +444,23 @@ export default function App() {
     };
   }, [session?.user?.id, isLoaded]);
 
+  // Watch for signal going on and off
+  useEffect(() => {
+    const goOnline = () => setIsOnline(true);
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+  }, []);
+
+  // Count reports saved on this phone that haven't reached the cloud yet
+  useEffect(() => {
+    db.reports.where("dirty").equals(1).count().then(setUnsentCount);
+  }, [reports, isOnline, isSyncing]);
+
   const activeProject = projects.find((p) => p.id === activeTab) || projects[0];
   // Initials for the profile button (e.g. "Jason Johnson" → "JJ")
   const initials = profile.name
@@ -495,69 +514,83 @@ export default function App() {
       )}
 
       {/* Main Top Header Navbar */}
-<header className="bg-teal-900 text-white shadow-md border-b border-teal-800">
-  <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-    <div className="flex items-center gap-3 min-w-0">
-      <img src="/favicon.svg" alt="Daily Report Tracker logo" className="w-10 h-10 rounded-lg shrink-0" />
-      <div className="min-w-0">
-        <h1 className="font-bold text-lg tracking-wide leading-none truncate">Daily Report Tracker</h1>
-        <p className="text-xs text-teal-300 font-light mt-0.5 truncate">Field Inspection & AI Dictation</p>
-      </div>
-    </div>
-
-    <div className="flex items-center gap-2 shrink-0">
-      {/* Sync button */}
-      <button
-        onClick={() => handleSync()}
-        disabled={isSyncing}
-        title="Sync now"
-        aria-label="Sync now"
-        className="w-11 h-11 rounded-xl bg-teal-800 hover:bg-teal-700 disabled:opacity-60 flex items-center justify-center transition"
-      >
-        <RefreshCw className={`w-5 h-5 ${isSyncing ? "animate-spin" : ""}`} />
-      </button>
-
-      {/* Profile button + dropdown menu */}
-      <div className="relative">
-        <button
-          onClick={() => setIsMenuOpen((open) => !open)}
-          title="Profile"
-          aria-label="Profile menu"
-          className="w-11 h-11 rounded-full bg-teal-300 text-teal-950 font-bold flex items-center justify-center"
-        >
-          {initials || <User className="w-5 h-5" />}
-        </button>
-
-        {isMenuOpen && (
-          <>
-            {/* Tapping anywhere outside closes the menu */}
-            <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)} />
-            <div className="absolute right-0 mt-2 w-60 bg-white text-slate-800 rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
-              <div className="px-4 py-3 border-b border-slate-100">
-                <p className="font-bold text-base truncate">{profile.name || "Welcome!"}</p>
-                <p className="text-sm text-slate-500 truncate">{profile.company || "Add your name and company"}</p>
-              </div>
-              <button
-                onClick={() => { setIsMenuOpen(false); handleOpenEditProfile(); }}
-                className="w-full flex items-center gap-3 px-4 py-3 text-base hover:bg-slate-50"
-              >
-                <Pencil className="w-4 h-4 text-slate-500" />
-                {profile.name ? "Edit Profile" : "Set Up Profile"}
-              </button>
-              <button
-                onClick={() => { setIsMenuOpen(false); handleSignOut(); }}
-                className="w-full flex items-center gap-3 px-4 py-3 text-base text-red-700 hover:bg-red-50 border-t border-slate-100"
-              >
-                <LogOut className="w-4 h-4" />
-                Sign Out
-              </button>
+      <header className="bg-teal-900 text-white shadow-md border-b border-teal-800">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <img src="/favicon.svg" alt="Daily Report Tracker logo" className="w-10 h-10 rounded-lg shrink-0" />
+            <div className="min-w-0">
+              <h1 className="font-bold text-lg tracking-wide leading-none truncate">Daily Report Tracker</h1>
+              <p className="text-xs text-teal-300 font-light mt-0.5 truncate">Field Inspection & AI Dictation</p>
             </div>
-          </>
-        )}
-      </div>
-    </div>
-  </div>
-</header>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Sync button */}
+            <button
+              onClick={() => handleSync()}
+              disabled={isSyncing}
+              title="Sync now"
+              aria-label="Sync now"
+              className="w-11 h-11 rounded-xl bg-teal-800 hover:bg-teal-700 disabled:opacity-60 flex items-center justify-center transition"
+            >
+              <RefreshCw className={`w-5 h-5 ${isSyncing ? "animate-spin" : ""}`} />
+            </button>
+
+            {/* Profile button + dropdown menu */}
+            <div className="relative">
+              <button
+                onClick={() => setIsMenuOpen((open) => !open)}
+                title="Profile"
+                aria-label="Profile menu"
+                className="w-11 h-11 rounded-full bg-teal-300 text-teal-950 font-bold flex items-center justify-center"
+              >
+                {initials || <User className="w-5 h-5" />}
+              </button>
+
+              {isMenuOpen && (
+                <>
+                  {/* Tapping anywhere outside closes the menu */}
+                  <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)} />
+                  <div className="absolute right-0 mt-2 w-60 bg-white text-slate-800 rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
+                    <div className="px-4 py-3 border-b border-slate-100">
+                      <p className="font-bold text-base truncate">{profile.name || "Welcome!"}</p>
+                      <p className="text-sm text-slate-500 truncate">{profile.company || "Add your name and company"}</p>
+                    </div>
+                    <button
+                      onClick={() => { setIsMenuOpen(false); handleOpenEditProfile(); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-base hover:bg-slate-50"
+                    >
+                      <Pencil className="w-4 h-4 text-slate-500" />
+                      {profile.name ? "Edit Profile" : "Set Up Profile"}
+                    </button>
+                    <button
+                      onClick={() => { setIsMenuOpen(false); handleSignOut(); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-base text-red-700 hover:bg-red-50 border-t border-slate-100"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Sign Out
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* No signal banner */}
+      {!isOnline && (
+        <div className="bg-amber-100 border-b border-amber-300 text-amber-900">
+          <div className="max-w-6xl mx-auto px-4 py-2.5 flex items-center gap-2 text-base font-medium">
+            <AlertCircle className="w-5 h-5 shrink-0 text-amber-700" />
+            <span>
+              No signal
+              {unsentCount > 0 && ` — ${unsentCount} report${unsentCount > 1 ? "s" : ""} saved on this phone`}.
+              {" "}Will sync when you're back online.
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* View Switcher: Dashboard View vs. Forms View */}
       {activeView === "dashboard" ? (
