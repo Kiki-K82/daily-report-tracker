@@ -616,17 +616,14 @@ export default function App() {
           {/* Project Tabs Section */}
           {projects.length > 0 && (
             <section className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
-                  <Folder className="w-4 h-4 text-teal-700" /> Active Projects
-                </h3>
-                <button
-                  onClick={handleOpenAddProject}
-                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-teal-800 bg-white border border-slate-300 rounded-xl hover:bg-teal-50 transition"
-                >
-                  <Plus className="w-4 h-4" /> Add Project
-                </button>
-              </div>
+
+              {/* Add Project link */}
+              <button
+                onClick={handleOpenAddProject}
+                className="flex items-center gap-1.5 px-1 py-2 text-base font-semibold text-teal-700 hover:text-teal-900 transition"
+              >
+                <Plus className="w-5 h-5" /> Add Project
+              </button>
 
               <div className="flex space-x-2 border-b border-slate-300 overflow-x-auto pb-1 scrollbar-none">
                 {projects.map((proj) => {
