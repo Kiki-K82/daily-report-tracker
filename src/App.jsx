@@ -594,7 +594,7 @@ export default function App() {
 
       {/* View Switcher: Dashboard View vs. Forms View */}
       {activeView === "dashboard" ? (
-        <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-6 space-y-6">
+        <main className="flex-1 max-w-6xl w-full mx-auto px-4 pt-6 pb-36 space-y-6">
 
           {/* Shown when there are no projects yet */}
           {projects.length === 0 && (
@@ -669,14 +669,6 @@ export default function App() {
                       <span>Total Logs: {projectReports.length}</span>
                     </p>
                   </div>
-
-                  <button
-                    onClick={() => handleOpenReportForm()}
-                    className="w-full sm:w-auto px-5 py-3 bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white font-bold text-sm rounded-xl transition shadow-md hover:shadow-lg flex items-center justify-center gap-2 group"
-                  >
-                    <Plus className="w-5 h-5 transition-transform group-hover:rotate-90" />
-                    Add New Report
-                  </button>
                 </div>
 
                 {/* Search & Filter Bar */}
@@ -701,7 +693,6 @@ export default function App() {
                     <span>Showing {projectReports.length} entries</span>
                   </div>
                 </div>
-
                 {/* Reports List */}
                 {projectReports.length > 0 ? (
                   <div className="space-y-3">
@@ -751,6 +742,16 @@ export default function App() {
                 )}
               </div>
             </section>
+          )}
+          {/* Floating Add New Report button (raised above the Netlify badge) */}
+          {projects.length > 0 && (
+            <button
+              onClick={() => handleOpenReportForm()}
+              className="fixed inset-x-4 bottom-[4.25rem] z-30 mx-auto max-w-md py-4 bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white font-bold text-lg rounded-2xl shadow-xl transition flex items-center justify-center gap-2 group"
+            >
+              <Plus className="w-6 h-6 transition-transform group-hover:rotate-90" />
+              Add New Report
+            </button>
           )}
         </main>
       ) : activeView === "report_form" ? (
