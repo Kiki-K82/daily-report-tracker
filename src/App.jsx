@@ -501,7 +501,8 @@ export default function App() {
       r.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       r.date.toLowerCase().includes(searchQuery.toLowerCase()) ||
       r.bullets.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    )
+    .sort((a, b) => (b.draft ? 1 : 0) - (a.draft ? 1 : 0)); // drafts first
   if (!authChecked) {
     return (
       <div className="min-h-screen flex items-center justify-center text-slate-500">
@@ -728,16 +729,28 @@ export default function App() {
                     {projectReports.map((report) => (
                       <div
                         key={report.id}
-                        className="group bg-slate-50 hover:bg-slate-100/90 border border-slate-200 hover:border-teal-300 rounded-xl px-3 py-2.5 sm:px-4 transition duration-150 flex items-center gap-1.5 shadow-2xs"
+                        className={`group border rounded-xl px-3 py-2.5 sm:px-4 transition duration-150 flex items-center gap-1.5 shadow-2xs ${report.draft
+                          ? "bg-amber-50 border-amber-300 hover:border-amber-400"
+                          : "bg-slate-50 hover:bg-slate-100/90 border-slate-200 hover:border-teal-300"
+                          }`}
                       >
                         <button
-                          onClick={() => handleOpenViewReport(report)}
+                          onClick={() => (report.draft ? handleOpenReportForm(report) : handleOpenViewReport(report))}
                           className="flex-1 min-w-0 flex flex-col gap-1 text-left focus:outline-none"
                         >
                           <span className="font-bold text-slate-800 text-base leading-snug line-clamp-2 group-hover:text-teal-900 transition">
+                            {report.draft && (
+                              <span className="inline-block mr-1.5 px-2 py-0.5 rounded-md bg-amber-200 text-amber-900 text-xs font-extrabold tracking-wide align-[2px]">
+                                DRAFT
+                              </span>
+                            )}
                             {report.title}
                           </span>
-                          <span className="text-sm font-semibold text-teal-700">{report.date}</span>
+                          <span className={`text-sm font-semibold ${report.draft ? "text-amber-800" : "text-teal-700"}`}>
+                            {report.date}
+                            {report.draft && report.updatedAt &&
+                              ` · Auto-saved ${new Date(report.updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`}
+                          </span>
                         </button>
                         <button
                           onClick={() => handleOpenReportForm(report)}
