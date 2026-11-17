@@ -225,22 +225,51 @@ export default function App() {
     }
   };
 
+  // Keep the cloud location of photos that were already uploaded (so they aren't uploaded again)
+  const keepPhotoPaths = async (report) => {
+    const saved = await db.reports.get(report.id);
+    const paths = new Map((saved?.photos || []).map((p) => [p.id, p.path]));
+    return {
+      ...report,
+      photos: report.photos.map((p) => (paths.get(p.id) ? { ...p, path: paths.get(p.id) } : p)),
+    };
+  };
+
+  // Save Report: the report is finished (no longer a draft)
   const handleSaveReport = async (reportData) => {
     try {
-      await db.reports.put({ ...reportData, updatedAt: Date.now(), dirty: 1 });
-      setReports((prevReports) => {
-        const exists = prevReports.some((r) => r.id === reportData.id);
-        return exists
-          ? prevReports.map((r) => (r.id === reportData.id ? reportData : r))
-          : [reportData, ...prevReports];
-      });
+      const finished = { ...(await keepPhotoPaths(reportData)), draft: false, updatedAt: Date.now(), dirty: 1 };
+      await db.reports.put(finished);
+      setReports((prev) =>
+        prev.some((r) => r.id === finished.id)
+          ? prev.map((r) => (r.id === finished.id ? finished : r))
+          : [finished, ...prev]
+      );
       showToast(selectedReport ? "Report updated successfully!" : "New report created successfully!");
       scheduleSync();
-      setSelectedReport(reportData);
+      setSelectedReport(finished);
       setActiveView("view_report");
     } catch (err) {
       console.error(err);
       showToast("Save failed: storage may be full. Report not saved.");
+    }
+  };
+
+  // Auto-save: quietly saves an unfinished report as a draft while the form is open
+  const handleAutoSave = async (reportData) => {
+    try {
+      const draft = { ...(await keepPhotoPaths(reportData)), draft: true, updatedAt: Date.now(), dirty: 1 };
+      await db.reports.put(draft);
+      setReports((prev) =>
+        prev.some((r) => r.id === draft.id)
+          ? prev.map((r) => (r.id === draft.id ? draft : r))
+          : [draft, ...prev]
+      );
+      scheduleSync();
+      return true;
+    } catch (err) {
+      console.error("Auto-save failed:", err);
+      return false;
     }
   };
 
@@ -762,6 +791,7 @@ export default function App() {
           profile={profile}
           showToast={showToast}
           onSave={handleSaveReport}
+          onAutoSave={handleAutoSave}
           onCancel={() => setActiveView("dashboard")}
         />
       ) : (
@@ -1043,7 +1073,7 @@ export default function App() {
 }
 
 // --- SUB-COMPONENT FOR CREATING & EDITING REPORTS WITH PHOTOS & VOICE ---
-function ReportFormView({ selectedReport, activeProject, profile, showToast, onSave, onCancel }) {
+function ReportFormView({ selectedReport, activeProject, profile, showToast, onSave, onAutoSave, onCancel }) {
   // The report's ID is set when the form opens, so offline voice notes can be linked to it
   const [reportId] = useState(() => selectedReport?.id || `rep-${Date.now()}`);
   // While this form is open, its waiting voice notes are held until the report is saved
@@ -1234,28 +1264,71 @@ function ReportFormView({ selectedReport, activeProject, profile, showToast, onS
     if (bullets.trim() === "") setBullets("• ");
   };
 
+  // --- Auto-save drafts (new reports and unfinished drafts only) ---
+  const isDraftMode = !selectedReport || selectedReport.draft;
+  const [lastSaved, setLastSaved] = useState(selectedReport?.draft ? selectedReport.updatedAt : null);
+  const autoSaveTimer = React.useRef(null);
+  const isFinished = React.useRef(false); // true once Save Report is tapped
+  const isFirstRun = React.useRef(true);
+
+  // Only save a draft once there's something worth keeping
+  const hasContent =
+    bullets.replace(/•/g, "").trim() !== "" || photos.length > 0 || pendingNotes > 0;
+
+  // Everything on the form, in the format the app stores
+  const buildReport = () => ({
+    id: reportId,
+    projectId: selectedReport?.projectId || activeProject.id,
+    title,
+    date: toDisplay(date),
+    weather,
+    bullets,
+    photos,
+    prepBy: selectedReport?.prepBy || profile.name,
+  });
+
+  const saveDraftNow = async () => {
+    clearTimeout(autoSaveTimer.current);
+    if (!isDraftMode || isFinished.current || !hasContent) return;
+    if (await onAutoSave(buildReport())) setLastSaved(Date.now());
+  };
+
+  // Save 1.5 seconds after the last change (waits while you're still typing)
+  useEffect(() => {
+    if (isFirstRun.current) {
+      isFirstRun.current = false; // don't save just for opening the form
+      return;
+    }
+    clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(saveDraftNow, 1500);
+  }, [title, date, weather, bullets, photos, pendingNotes]);
+
+  // Stop the timer when the form closes
+  useEffect(() => () => clearTimeout(autoSaveTimer.current), []);
+
   // Warn before leaving a new, unsaved report that has voice notes waiting
   const confirmLeave = () =>
     pendingNotes === 0 ||
-    selectedReport || // an existing report keeps its notes even if you leave
+    selectedReport || lastSaved || // an existing report or saved draft keeps its notes
     window.confirm(
       `You have ${pendingNotes} voice note${pendingNotes > 1 ? "s" : ""} waiting for signal.\n\n` +
       `If you leave without saving, ${pendingNotes > 1 ? "they" : "it"} will be lost. Leave anyway?`
     );
 
+  // Back / Cancel: save the draft first, so nothing is lost
+  const handleLeave = async () => {
+    if (!confirmLeave()) return;
+    cancelRecording();
+    await saveDraftNow();
+    onCancel();
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
+    isFinished.current = true; // stop auto-save so it can't turn this back into a draft
+    clearTimeout(autoSaveTimer.current);
     cancelRecording();
-    onSave({
-      id: reportId,
-      projectId: selectedReport?.projectId || activeProject.id,
-      title,
-      date: toDisplay(date),
-      weather,
-      bullets,
-      photos,
-      prepBy: selectedReport?.prepBy || profile.name
-    });
+    onSave(buildReport());
   };
 
   return (
@@ -1263,11 +1336,7 @@ function ReportFormView({ selectedReport, activeProject, profile, showToast, onS
       <div className="flex items-center justify-between">
         <button
           type="button"
-          onClick={() => {
-            if (!confirmLeave()) return;
-            cancelRecording();
-            onCancel();
-          }}
+          onClick={handleLeave}
           className="flex items-center gap-2 text-sm font-bold text-teal-800 hover:text-teal-900 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-2xs"
         >
           <ArrowLeft className="w-4 h-4" /> Back to Dashboard
@@ -1283,6 +1352,12 @@ function ReportFormView({ selectedReport, activeProject, profile, showToast, onS
             {selectedReport ? `Edit Report: ${selectedReport.title}` : "New Daily Inspection Report"}
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">Project: {activeProject.name} ({activeProject.code})</p>
+          {isDraftMode && lastSaved && (
+            <div className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5">
+              <Check className="w-4 h-4" />
+              Draft saved on this phone · {new Date(lastSaved).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+            </div>
+          )}
         </div>
 
         {/* Report Title */}
@@ -1420,7 +1495,7 @@ function ReportFormView({ selectedReport, activeProject, profile, showToast, onS
 
         {/* Actions */}
         <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-          <button type="button" onClick={() => { if (!confirmLeave()) return; cancelRecording(); onCancel(); }} className="px-5 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-200 transition">
+          <button type="button" onClick={handleLeave} className="px-5 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-200 transition">
             Cancel
           </button>
           <button type="submit" className="px-6 py-2.5 bg-teal-700 text-white rounded-xl text-sm font-bold hover:bg-teal-800 transition shadow-md">

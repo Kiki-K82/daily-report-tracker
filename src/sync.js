@@ -23,6 +23,7 @@ const reportToCloud = (r, userId) => ({
   date: r.date,
   weather: r.weather || null,
   bullets: r.bullets || "",
+  draft: !!r.draft,
   prep_by: r.prepBy || null,
   // Only the photo's ID, caption, and cloud location — not the image itself
   photos: (r.photos || []).map(({ id, caption, path }) => ({ id, caption, path })),
@@ -158,6 +159,7 @@ const reportFromCloud = (r) => ({
   date: r.date,
   weather: r.weather || "",
   bullets: r.bullets || "",
+  draft: !!r.draft,
   prepBy: r.prep_by || "",
   photos: r.photos || [],
   updatedAt: Date.parse(r.updated_at),
