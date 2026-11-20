@@ -23,6 +23,13 @@ function toDisplayDate(iso) {
   });
 }
 
+// A section heading is a line that isn't a bullet and ends with ":" (e.g. "Mechanical:")
+// (Same rule as in App.jsx, kept here so the PDF tool stays separate)
+function isHeading(line) {
+  const t = line.trim();
+  return t.length > 1 && t.length <= 60 && !t.startsWith("•") && t.endsWith(":");
+}
+
 // Shrink a photo for the PDF and measure it, so the file stays small
 function preparePhoto(url, maxSize = 1200, quality = 0.72) {
   return new Promise((resolve, reject) => {
@@ -129,7 +136,20 @@ export async function buildReportPdf({ report, project, profile }) {
   heading("Field Notes");
   const lineH = 16;
   const notes = (report.bullets || "").split("\n").filter((l) => l.trim());
-  for (const note of notes) {
+  notes.forEach((note, n) => {
+    // Section heading (e.g. "Mechanical:"): bold, no bullet, a little space above
+    if (isHeading(note)) {
+      if (n > 0) y += 8;
+      ensureSpace(lineH * 2); // keep the heading on the same page as its first bullet
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(...SLATE_900);
+      doc.text(note.trim(), MARGIN, y);
+      y += lineH + 2;
+      return;
+    }
+    // Normal line: bullet only if the line starts with "•"
+    const isBullet = note.trim().startsWith("•");
     const text = note.replace(/^\s*•\s*/, "").trim();
     const wrapped = doc.splitTextToSize(text, CONTENT_W - 24);
     wrapped.forEach((part, i) => {
@@ -137,11 +157,11 @@ export async function buildReportPdf({ report, project, profile }) {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(11);
       doc.setTextColor(...SLATE_700);
-      if (i === 0) doc.text("•", MARGIN + 6, y); // bullet only on the first line
+      if (i === 0 && isBullet) doc.text("•", MARGIN + 6, y); // bullet only on the first line
       doc.text(part, MARGIN + 18, y);
       y += lineH;
     });
-  }
+  });
 
   // ---------- Photos: 3 per row, never split across pages ----------
   const photos = report.photos || [];
