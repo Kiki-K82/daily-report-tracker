@@ -888,9 +888,15 @@ export default function App() {
 
             <div>
               <h3 className="text-sm font-bold text-slate-900 mb-2 border-b border-slate-200 pb-1">Field Notes</h3>
-              <p className="text-base text-slate-800 leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-200">
-                {selectedReport?.bullets}
-              </p>
+              <div className="text-base text-slate-800 leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-1">
+                {(selectedReport?.bullets || "").split("\n").map((line, i) =>
+                  isHeading(line) ? (
+                    <p key={i} className={`font-bold text-slate-900 ${i > 0 ? "pt-3" : ""}`}>{line}</p>
+                  ) : (
+                    <p key={i}>{line || "\u00A0"}</p>
+                  )
+                )}
+              </div>
             </div>
 
             {/* Attached Photos in PDF Preview */}
@@ -1196,11 +1202,11 @@ function ReportFormView({ selectedReport, activeProject, profile, showToast, onS
       const { data, error } = await supabase.functions.invoke("transcribe", { body: form });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      // Use the cleaned-up bullets (fall back to the plain transcript)
-      const newBullets = data?.bullets?.length ? data.bullets : data?.text ? [data.text.trim()] : [];
-      if (newBullets.length > 0) {
-        const added = newBullets.map((b) => `• ${b}`).join("\n");
-        setBullets((prev) => (prev ? `${prev}\n${added}` : added));
+
+      // Use the cleaned-up notes with headings (fall back to the plain transcript)
+      const added = data?.notes?.trim() || (data?.text?.trim() ? `• ${data.text.trim()}` : "");
+      if (added) {
+        setBullets((prev) => addNotes(prev, added));
       } else {
         showToast("No speech was detected. Please try again.");
       }
@@ -1583,4 +1589,17 @@ async function compressImage(file, maxSize = 1600, quality = 0.7) {
     };
     img.src = url;
   });
+}
+
+// --- Notes helpers ---
+// A section heading is a line that isn't a bullet and ends with ":" (e.g. "Mechanical:")
+function isHeading(line) {
+  const t = line.trim();
+  return t.length > 1 && t.length <= 60 && !t.startsWith("•") && t.endsWith(":");
+}
+
+// Add new notes below the existing ones (an empty "•" left from tapping the box is replaced)
+function addNotes(existing, added) {
+  const prev = existing.replace(/\n?•\s*$/, "").trimEnd();
+  return prev ? `${prev}\n${added}` : added;
 }
