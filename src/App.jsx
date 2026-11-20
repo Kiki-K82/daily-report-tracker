@@ -600,6 +600,9 @@ export default function App() {
                       <LogOut className="w-4 h-4" />
                       Sign Out
                     </button>
+                    <p className="px-4 py-2 text-xs text-slate-400 border-t border-slate-100">
+                      Version: {new Date(__BUILD_TIME__).toLocaleString([], { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+                    </p>
                   </div>
                 </>
               )}
