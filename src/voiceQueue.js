@@ -16,10 +16,10 @@ async function transcribeBlob(blob) {
   const { data, error } = await supabase.functions.invoke("transcribe", { body: form });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
-  // Return the cleaned-up bullets (or the plain transcript as one bullet)
-  if (data?.bullets?.length) return data.bullets;
+  // Return the cleaned-up notes with headings (or the plain transcript as one bullet)
+  if (data?.notes?.trim()) return data.notes.trim();
   const text = (data?.text || "").trim();
-  return text ? [text] : [];
+  return text ? `• ${text}` : "";
 }
 
 // Add each waiting note's text to its saved report, oldest first
@@ -40,10 +40,10 @@ export async function processQueuedNotes() {
       continue;
     }
 
-    const newBullets = await transcribeBlob(note.blob);
-    if (newBullets.length > 0) {
-      const addedText = newBullets.map((b) => `• ${b}`).join("\n");
-      const bullets = report.bullets ? `${report.bullets}\n${addedText}` : addedText;
+    const addedText = await transcribeBlob(note.blob);
+    if (addedText) {
+      const prev = (report.bullets || "").replace(/\n?•\s*$/, "").trimEnd(); // drop an empty bullet at the end
+      const bullets = prev ? `${prev}\n${addedText}` : addedText;
       await db.reports.update(note.reportId, { bullets, updatedAt: Date.now(), dirty: 1 });
       added++;
     }
